@@ -1,6 +1,6 @@
 """
 routers/tactical.py
-────────────────────
+──────────────────
 Tactical Force Allocation — production MVP
 
 Endpoints:
@@ -42,7 +42,7 @@ def classify_patrol_type(officers: int, risk: float) -> dict:
         return {"type": "MONITORING",      "formation": "Single officer check-ins"}
 
 
-# ── Safe JSON parser ──────────────────────────────────────────────────────────
+# ── Safe JSON parser ──────────────────────────────────────────────────────
 def _safe_parse(raw: str) -> dict:
     text = re.sub(r'```(?:json)?', '', raw).strip()
     s = text.find('{')
@@ -55,7 +55,7 @@ def _safe_parse(raw: str) -> dict:
         return {}
 
 
-# ── Zone enrichment ───────────────────────────────────────────────────────────
+# ── Zone enrichment ────────────────────────────────────────────────────────
 def _enrich_zones(allocation: list) -> list:
     for zone in allocation:
         zone["patrol_type"] = classify_patrol_type(
@@ -65,14 +65,8 @@ def _enrich_zones(allocation: list) -> list:
     return allocation
 
 
-# ── T4: Auto-create Alert + DispatchTask for high-risk zones ──────────────────
+# ── T4: Auto-create Alert + DispatchTask for high-risk zones ─────────────────
 def _commit_dispatch_tasks(allocation: list, shift: str, briefings: dict) -> list:
-    """
-    For every zone with risk_score >= 50, creates:
-      - An Alert (severity based on risk)
-      - A DispatchTask linked to that alert (status=PENDING)
-    Returns list of created task IDs.
-    """
     db = SessionLocal()
     task_ids = []
     try:
@@ -85,7 +79,6 @@ def _commit_dispatch_tasks(allocation: list, shift: str, briefings: dict) -> lis
             priority = briefing.get("priority_action", "Monitor zone activity.")
             formation = zone["patrol_type"]["formation"]
 
-            # Create alert
             alert = Alert(
                 title=f"[TACTICAL] {zone['zone']} — {zone['patrol_type']['type']}",
                 message=(
@@ -98,12 +91,11 @@ def _commit_dispatch_tasks(allocation: list, shift: str, briefings: dict) -> lis
                 is_active=True,
             )
             db.add(alert)
-            db.flush()  # get alert.id without full commit
+            db.flush()
 
-            # Create dispatch task
             task = DispatchTask(
                 alert_id=alert.id,
-                user_id=1,  # default officer; frontend can reassign
+                user_id=1,
                 status="PENDING",
                 notes=(
                     f"AUTO-DEPLOYED | {zone['patrol_type']['type']} | "
@@ -127,7 +119,7 @@ def _commit_dispatch_tasks(allocation: list, shift: str, briefings: dict) -> lis
     return task_ids
 
 
-# ── Per-zone AI briefing ──────────────────────────────────────────────────────
+# ── Per-zone AI briefing ───────────────────────────────────────────────────
 async def _brief_one_zone(z: dict, scenario: str, day: str, shift: str) -> tuple:
     prompt = f"""[SENTINEL_TACTICAL_AI — MUMBAI POLICE]
 Zone: {z['zone_id']} ({z['zone']}) | Shift: {shift.upper()} | Scenario: {scenario} | Day: {day}
@@ -170,9 +162,11 @@ Plain text only — no JSON, no bullet points."""
         return f"Deploy {total} officers across priority zones. Maintain heightened vigilance."
 
 
-# ── Shared deploy + brief logic ───────────────────────────────────────────────
+# ── Shared deploy + brief logic ──────────────────────────────────────────────
 async def _run_full_deploy(total_officers: int, shift: Optional[str], scenario: str, day: str) -> dict:
-    result = await run_patrol_optimization(total_officers, shift)
+    # Normalise shift to lowercase — patrol_optimizer keys are lowercase
+    shift_norm = shift.lower() if shift else None
+    result = await run_patrol_optimization(total_officers, shift_norm)
     result["allocation"] = _enrich_zones(result["allocation"])
 
     top5 = sorted(result["allocation"], key=lambda z: z["risk_score"], reverse=True)[:5]
@@ -191,12 +185,13 @@ async def _run_full_deploy(total_officers: int, shift: Optional[str], scenario: 
     return result, briefings
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+# ── Endpoints ─────────────────────────────────────────────────────────────
 
 @router.post("/deploy")
 async def deploy(total_officers: int = 60, shift: Optional[str] = None):
     """LP optimizer only — no AI briefing."""
-    result = await run_patrol_optimization(total_officers, shift)
+    shift_norm = shift.lower() if shift else None
+    result = await run_patrol_optimization(total_officers, shift_norm)
     result["allocation"] = _enrich_zones(result["allocation"])
     return result
 
@@ -204,7 +199,8 @@ async def deploy(total_officers: int = 60, shift: Optional[str] = None):
 @router.get("/deploy/latest")
 def latest_deployment(shift: Optional[str] = None):
     """Last saved deployment from DB — no recompute."""
-    return get_latest_deployment(shift)
+    shift_norm = shift.lower() if shift else None
+    return get_latest_deployment(shift_norm)
 
 
 @router.post("/deploy/full")
@@ -229,11 +225,8 @@ async def deploy_commit(
     """
     Full deploy + AI briefing + auto-creates Alert + DispatchTask
     for every high-risk zone (risk >= 50). Returns task IDs.
-    This is the production command endpoint.
     """
     result, briefings = await _run_full_deploy(total_officers, shift, scenario, day)
-
-    # T4: commit dispatch tasks for high-risk zones
     task_ids = _commit_dispatch_tasks(
         result["allocation"], result["shift"], briefings
     )
@@ -242,7 +235,7 @@ async def deploy_commit(
     return result
 
 
-# ── Legacy briefing endpoint ───────────────────────────────────────────────────
+# ── Legacy briefing endpoint ────────────────────────────────────────────────────
 class ZoneInput(BaseModel):
     zone_id: str
     zone_name: str
