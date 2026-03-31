@@ -1,0 +1,92 @@
+.sentinel-pulse-ticker {
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--marvel-border);
+    height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 0 2rem;
+    font-family: 'Space Grotesk', sans-serif;
+    overflow: hidden;
+    position: relative;
+    z-index: 1000;
+}
+
+.ticker-label {
+    background: var(--marvel-accent);
+    color: #020617;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 0.70rem;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 2rem;
+    flex-shrink: 0;
+    box-shadow: 0 0 20px var(--marvel-accent-glow);
+}
+
+.pulse-icon {
+    animation: blink-pulse 1s infinite;
+}
+
+@keyframes blink-pulse {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.9); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.ticker-content {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+}
+
+.ticker-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--marvel-text);
+}
+
+.ticker-category {
+    color: var(--marvel-danger);
+    font-weight: 900;
+    font-size: 0.75rem;
+}
+
+.ticker-location {
+    font-weight: 900;
+    color: #f1f5f9;
+}
+
+.ticker-title {
+    opacity: 0.9;
+    letter-spacing: -0.01em;
+}
+
+.ticker-time {
+    color: var(--marvel-text-muted);
+    font-size: 0.7rem;
+    margin-left: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.ticker-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 2rem;
+    color: var(--marvel-accent);
+    font-size: 0.65rem;
+    font-weight: 900;
+    opacity: 0.7;
+    letter-spacing: 2px;
+}

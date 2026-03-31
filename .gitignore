@@ -1,0 +1,94 @@
+# Environments
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build
+dist/
+build/
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env/
+evn/
+celerybeat-schedule*
+
+# Data
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agentic / Brain
+.agents/
+.agent/
+_agents/
+_agent/
+.gemini/
+brain/
+tmp/
+C:\Users\sarth\.gemini\antigravity\brain/
+
+# IDE
+.vscode/
+.idea/
+# Environment & secrets
+.env
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Logs & debug dumps
+*.log
+*.txt
+err_utf8.txt
+full_error.txt
+output.txt
+server_debug.log
+server_direct.log
+server_final.log
+server_log.txt
+
+# Temp/migration scripts (optional)
+tmp_*.py
+tmp_*.sql
+tmp_*.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Node / frontend build
+node_modules/
+frontend/dist/
+frontend/build/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+evn/
+.env
+__pycache__/
+*.pyc
+*.pkl
+ml/*.pkl
+node_modules/
+dist/
+build/
+*.dll
+*.so

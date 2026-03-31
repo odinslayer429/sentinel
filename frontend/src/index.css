@@ -1,0 +1,235 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Enterprise Government Standard Colors (MARVEL / Palantir Gotham inspired) */
+  --bg-primary: #f0f2f5;
+  --bg-secondary: #ffffff;
+  --bg-sidebar: #0f172a; /* Navy Blue */
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --text-light: #f8fafc;
+  
+  --color-primary: #2563eb; /* Official Blue */
+  --color-danger: #ef4444; /* High Risk Red */
+  --color-success: #10b981; /* Clear / Safe */
+  --color-warning: #f59e0b;
+  
+  --border-subtle: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ENTERPRISE COMPONENTS
+───────────────────────────────────────────────────────────────────────────── */
+
+.enterprise-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  box-shadow: var(--shadow-sm);
+  padding: 1.5rem;
+}
+
+.enterprise-header {
+  border-bottom: 2px solid var(--border-subtle);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.enterprise-header h3 {
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DATA TABLES (VAHAN / CCTNS standard)
+───────────────────────────────────────────────────────────────────────────── */
+
+.enterprise-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.enterprise-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem; /* High density, small font */
+  text-align: left;
+}
+
+.enterprise-table th {
+  background-color: #f8fafc;
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border-subtle);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+.enterprise-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.enterprise-table tbody tr:hover {
+  background-color: #f1f5f9;
+}
+
+.enterprise-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   BADGES & STATUSES
+───────────────────────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.badge-danger {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.badge-warning {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.badge-success {
+  background-color: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-neutral {
+  background-color: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   BUTTONS
+───────────────────────────────────────────────────────────────────────────── */
+
+.enterprise-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-primary {
+  background-color: var(--color-primary);
+  color: white;
+}
+.btn-primary:hover {
+  background-color: #1d4ed8;
+}
+
+.btn-success {
+  background-color: var(--color-success);
+  color: white;
+}
+.btn-success:hover {
+  background-color: #059669;
+}
+
+.btn-danger {
+  background-color: var(--bg-secondary);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+}
+.btn-danger:hover {
+  background-color: #fef2f2;
+}
+
+/* App Header styling override */
+.app-nav {
+  background-color: var(--bg-sidebar) !important;
+  border-bottom: none !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+}
+.brand-title {
+  font-family: 'Inter', sans-serif !important;
+  color: var(--text-light) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.025em !important;
+  text-transform: none !important;
+}
+.nav-links a {
+  font-family: 'Inter', sans-serif !important;
+  color: #94a3b8 !important;
+}
+.nav-links a:hover, .nav-links a.active {
+  color: white !important;
+  background-color: rgba(255,255,255,0.1) !important;
+}
+
+/* Custom overwrites for Leaflet Popups to match Enterprise */
+.enterprise-popup .leaflet-popup-content-wrapper {
+  background: white;
+  color: var(--text-main);
+  border-radius: 4px;
+  box-shadow: var(--shadow-md);
+  padding: 0.5rem;
+  font-size: 0.875rem;
+}
+.enterprise-popup .leaflet-popup-tip {
+  background: white;
+}
+
+/* CrimeMap � Leaflet requires explicit height on container */
+.leaflet-container {
+  height: 70vh !important;
+  min-height: 520px !important;
+  width: 100% !important;
+}

@@ -1,0 +1,58 @@
+{
+  "trained_at": "2026-03-30T11:11:25.858894",
+  "total_records": 1500,
+  "train_size": 1200,
+  "test_size": 300,
+  "crime_classes": [
+    "Assault",
+    "Cheating",
+    "Dacoity",
+    "Domestic Violence",
+    "Fraud",
+    "Molestation",
+    "Murder",
+    "Public Disorder",
+    "Robbery",
+    "Theft"
+  ],
+  "zone_classes": [
+    "Z01",
+    "Z02",
+    "Z03",
+    "Z04",
+    "Z05",
+    "Z06",
+    "Z07",
+    "Z08",
+    "Z09",
+    "Z10"
+  ],
+  "features": [
+    "zone_enc",
+    "hour",
+    "day_of_week",
+    "month",
+    "timeband_enc",
+    "is_weekend",
+    "is_night",
+    "is_festival",
+    "is_monsoon",
+    "severity"
+  ],
+  "rf_accuracy": 0.72,
+  "rf_cv_mean": 0.72,
+  "rf_cv_std": 0.0115,
+  "xgb_accuracy": 0.71,
+  "rf_feature_importances": {
+    "zone_enc": 0.06394599710705401,
+    "hour": 0.06847113336475635,
+    "day_of_week": 0.04969742521472324,
+    "month": 0.05365225689413699,
+    "timeband_enc": 0.020376837130791116,
+    "is_weekend": 0.010046105480554459,
+    "is_night": 0.010070796170156913,
+    "is_festival": 0.011178958158900704,
+    "is_monsoon": 0.011908015125325756,
+    "severity": 0.7006524753536004
+  }
+}

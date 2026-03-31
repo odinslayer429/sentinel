@@ -1,0 +1,222 @@
+﻿.copilot-wrapper {
+  position: fixed;
+  bottom: 80px;
+  right: 40px;
+  z-index: 10001;
+}
+
+.copilot-fab {
+  width: 60px;
+  height: 60px;
+  border-radius: 30px;
+  background: #111214;
+  color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  font-family: var(--mono-font);
+  font-weight: 900;
+  font-size: 1.2rem;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.copilot-fab:hover {
+  background: #2563EB;
+}
+
+.copilot-panel {
+  position: absolute;
+  bottom: 80px;
+  right: 0;
+  width: 380px;
+  height: 550px;
+  background: #FFFFFF;
+  border: 2px solid #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+}
+
+.copilot-header {
+  background: #111214;
+  color: #FFFFFF;
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono-font);
+  font-weight: 900;
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+}
+
+.copilot-header button {
+  background: #FFFFFF !important;
+  color: #111214 !important;
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+}
+
+.copilot-content-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  background: #F5F5F7;
+}
+
+.messages-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.message-bubble {
+  max-width: 85%;
+  padding: 1rem;
+  font-family: var(--mono-font);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  border: 1px solid #E5E7EB;
+}
+
+.message-bubble.assistant {
+  background: #FFFFFF;
+  color: #111214;
+  border-left: 4px solid #2563EB;
+}
+
+.message-bubble.user {
+  background: #111214;
+  color: #FFFFFF;
+  align-self: flex-end;
+  border-left: 4px solid #2563EB;
+}
+
+.steps-container {
+  margin-top: 1rem;
+  border-top: 1px solid #E5E7EB;
+  padding-top: 1rem;
+}
+
+.steps-label {
+  font-size: 0.6rem;
+  font-weight: 900;
+  color: #9A9A9E;
+  margin-bottom: 0.5rem;
+  letter-spacing: 1px;
+}
+
+.step-item {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 4px;
+  color: #555558;
+}
+
+.step-num {
+  color: #FFFFFF;
+  background: #2563EB;
+  padding: 0 4px;
+  font-weight: 900;
+}
+
+.loading-intel {
+  font-family: var(--mono-font);
+  font-size: 0.65rem;
+  color: #9A9A9E;
+  padding: 1rem 0;
+}
+
+.input-group {
+  display: flex;
+  gap: 0.5rem;
+  border-top: 2px solid #E5E7EB;
+  padding: 1rem;
+  background: #FFFFFF;
+}
+
+.opt-input {
+  flex: 1;
+  border: 1px solid #E5E7EB;
+  padding: 0.8rem;
+  font-family: var(--mono-font);
+  font-size: 0.75rem;
+  background: #F5F5F7;
+  color: #111214;
+}
+
+.opt-input:focus {
+  outline: none;
+  border-color: #2563EB;
+  background: #FFFFFF;
+}
+
+.opt-run-btn {
+  background: #2563EB;
+  color: #FFFFFF;
+  border: none;
+  padding: 0.8rem 1.2rem;
+  font-family: var(--mono-font);
+  font-weight: 900;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: background 0.2s;
+}
+
+.opt-run-btn:hover {
+  background: #1d4ed8;
+}
+
+/* FIR Styles */
+.fir-textarea {
+  width: 100%;
+  height: 150px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  padding: 1rem;
+  font-family: var(--mono-font);
+  font-size: 0.75rem;
+  resize: none;
+  color: #111214;
+}
+
+.alert-box {
+  background: #FEF2F2;
+  border: 1px solid #EF4444;
+  color: #991B1B;
+  padding: 10px;
+  font-family: var(--mono-font);
+  font-size: 0.7rem;
+  margin-top: 1rem;
+}
+
+/* Tabs */
+.opt-shift-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: #E5E7EB;
+  padding: 4px;
+}
+
+.shift-btn {
+  background: #FFFFFF;
+  border: none;
+  padding: 8px;
+  font-family: var(--mono-font);
+  font-size: 0.65rem;
+  font-weight: 900;
+  cursor: pointer;
+  color: #111214;
+  transition: background 0.2s;
+}
+
+.shift-btn.active {
+  background: #111214;
+  color: #FFFFFF;
+}

@@ -1,0 +1,42 @@
+[
+    {
+        "text": "BNS Section 303: Punishment for Murder. Whoever commits murder shall be punished with death, or imprisonment for life, and shall also be liable to fine. Equivalent to IPC Section 302.",
+        "metadata": {"section": "BNS 303", "category": "Homicide", "ipc_equiv": "IPC 302"}
+    },
+    {
+        "text": "BNS Section 318: Cheating. Whoever, by deceiving any person, fraudulently or dishonestly induces the person so deceived to deliver any property... commits cheating. Equivalent to IPC Section 420.",
+        "metadata": {"section": "BNS 318", "category": "Fraud", "ipc_equiv": "IPC 420"}
+    },
+    {
+        "text": "IPC Section 420: Cheating and dishonestly inducing delivery of property. Essential for financial scams and UPI frauds.",
+        "metadata": {"section": "IPC 420", "category": "Fraud", "bns_equiv": "BNS 318"}
+    },
+    {
+        "text": "IT Act Section 66C: Identity Theft. Punishment for identity theft involving electronic signatures or passwords. Crucial for account takeover cases.",
+        "metadata": {"section": "IT Act 66C", "category": "Cyber Fraud"}
+    },
+    {
+        "text": "IT Act Section 66D: Punishment for cheating by personation by using computer resource. Typically used in 'fake profile' or 'customer care' scams.",
+        "metadata": {"section": "IT Act 66D", "category": "Cyber Fraud"}
+    },
+    {
+        "text": "BNS Section 308: Culpable homicide not amounting to murder. Equivalent to IPC Section 304.",
+        "metadata": {"section": "BNS 308", "category": "Homicide", "ipc_equiv": "IPC 304"}
+    },
+    {
+        "text": "IPC Section 376: Punishment for Rape. Severe penalties for sexual assault. Note BNS Section 64 for equivalent modern provision.",
+        "metadata": {"section": "IPC 376", "category": "Sexual Offence", "bns_equiv": "BNS 64"}
+    },
+    {
+        "text": "BNS Section 111: Organized Crime. Defines and prescribes punishment for continuing unlawful activity by a group with the objective of gaining pecuniary benefit.",
+        "metadata": {"section": "BNS 111", "category": "Organized Crime"}
+    },
+    {
+        "text": "IPC Section 120B: Punishment of criminal conspiracy. Used when two or more persons agree to do an illegal act.",
+        "metadata": {"section": "IPC 120B", "category": "Conspiracy", "bns_equiv": "BNS 61(2)"}
+    },
+    {
+        "text": "IT Act Section 43: Penalty for damage to computer system. Includes unauthorized data extraction or deletion.",
+        "metadata": {"section": "IT Act 43", "category": "Data Breach"}
+    }
+]

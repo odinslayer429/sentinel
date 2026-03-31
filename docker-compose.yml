@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgis/postgis:15-3.3
+    environment:
+      POSTGRES_USER: marvel_admin
+      POSTGRES_PASSWORD: marvel_password
+      POSTGRES_DB: marvel_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+
+  backend:
+    build: .
+    volumes:
+      - ./backend:/app/backend
+      - ./ml:/app/ml
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=postgresql://marvel_admin:marvel_password@db:5432/marvel_db
+      - REDIS_URL=redis://redis:6379/0
+      - CHROMA_HOST=chromadb
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    ports:
+      - "8008:8008"
+    depends_on:
+      - db
+      - redis
+      - chromadb
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8008 --reload
+
+  worker:
+    build: .
+    volumes:
+      - ./backend:/app/backend
+      - ./ml:/app/ml
+    environment:
+      - DATABASE_URL=postgresql://marvel_admin:marvel_password@db:5432/marvel_db
+      - REDIS_URL=redis://redis:6379/0
+      - NEWS_API_KEY=${NEWS_API_KEY}
+      - NEWSDATA_API_KEY=${NEWSDATA_API_KEY}
+    depends_on:
+      - redis
+    command: celery -A backend.services.celery_app worker --loglevel=info
+
+  beat:
+    build: .
+    volumes:
+      - ./backend:/app/backend
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    command: celery -A backend.services.celery_app beat --loglevel=info
+
+volumes:
+  postgres_data:
+  chroma_data:
