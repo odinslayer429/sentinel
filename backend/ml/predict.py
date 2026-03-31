@@ -30,6 +30,7 @@ def predict_crime(zone_id: str, hour: int, day_of_week: int, month: int, severit
     """
     Returns top-3 predicted crime types with probabilities.
     Feature order: [zone_enc, hour, day_of_week, month, severity, timeband_enc]
+    Encoder keys: zone, timeband, crime
     """
     _load()
 
@@ -55,7 +56,7 @@ def predict_crime(zone_id: str, hour: int, day_of_week: int, month: int, severit
     features = np.array([[zone_enc, hour, day_of_week, month, severity, timeband_enc]])
 
     proba   = _model.predict_proba(features)[0]
-    classes = _encoders["target"].classes_
+    classes = _encoders["crime"].classes_          # key is 'crime', not 'target'
 
     top3_idx = proba.argsort()[-3:][::-1]
     predictions = [
