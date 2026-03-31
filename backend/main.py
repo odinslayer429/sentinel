@@ -17,10 +17,7 @@ from routers.auth import router as auth_router
 from routers.ml_engine import router as ml_router
 from routers.stats import router as stats_router
 from routers.predictive import router as predictive_router
-from routers.face_rec import router as face_router
-from routers.anpr import router as anpr_router
 from routers.copilot import router as copilot_router
-from routers.missing_persons import router as missing_router
 from routers.gang_networks import router as gang_router
 from routers.cyber_fraud import router as cyber_fraud_router
 from routers.briefing import router as briefing_router
@@ -30,7 +27,6 @@ from routers.events import router as events_router
 from routers.heatmap import router as heatmap_router
 from routers.investigation import router as investigation_router
 from routers.operations import router as operations_router
-from routers.osint import router as osint_router
 from routers.public_api import router as public_api_router
 from routers.velocity import router as velocity_router
 from routers.zones import router as zones_router
@@ -40,11 +36,9 @@ from routers.social import router as social_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Start Redis subscriber in the background
     subscribe_task = asyncio.create_task(redis_subscriber.start())
     print("[STARTUP] Sentinel backend & Redis subscriber online")
     yield
-    # Shutdown: Cancel the task
     subscribe_task.cancel()
     try:
         await subscribe_task
@@ -81,10 +75,7 @@ app.include_router(auth_router)
 app.include_router(stats_router)
 app.include_router(ml_router)
 app.include_router(predictive_router)
-app.include_router(face_router)
-app.include_router(anpr_router)
 app.include_router(copilot_router)
-app.include_router(missing_router)
 app.include_router(gang_router)
 app.include_router(cyber_fraud_router)
 app.include_router(briefing_router)
@@ -95,7 +86,6 @@ app.include_router(heatmap_router)
 app.include_router(tactical_router)
 app.include_router(investigation_router)
 app.include_router(operations_router)
-app.include_router(osint_router)
 app.include_router(public_api_router)
 app.include_router(velocity_router)
 app.include_router(zones_router)
@@ -105,16 +95,10 @@ app.include_router(social_router)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """
-    Production-grade WebSocket endpoint. 
-    Acceptance and broadcast lifecycle is managed by ws_manager and redis_pubsub.
-    """
     await manager.connect(websocket)
     try:
         while True:
-            # Keep connection open, wait for client messages if any
             data = await websocket.receive_text()
-            # Handle incoming if needed, or just pass
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
@@ -133,7 +117,6 @@ def startup_event():
 @app.get("/api/news/feed")
 def get_news_feed():
     data = fetch_crime_news()
-    print(f"[ROUTE] data length = {len(data)}")  # â† ADD THIS
     return {"results": data}
 
 @app.get("/api/debug/fetch")
