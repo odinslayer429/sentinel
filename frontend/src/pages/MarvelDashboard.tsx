@@ -3,25 +3,24 @@ import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import ForceAllocator from '../components/ForceAllocator';
 import DispatchBoard from '../components/DispatchBoard';
+import IntelStreamPanel from '../components/IntelStreamPanel';
 import 'leaflet/dist/leaflet.css';
 import './MarvelDashboard.css';
 import MahaCrimeCopilot from '../components/MahaCrimeCopilot';
 import CrimeMap from '../components/CrimeMap';
 
-// ─── Types ────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────
 interface ZoneVelocity { zone_id: string; zone_name: string; z_score: number; current_1h: number; mean_1h: number; score?: number; }
 interface Alert { zone: string; message: string; severity: string; }
-// Field names match the backend EventOut schema exactly:
-//   crime_types (not crime_type), published_at (not created_at/ingested_at)
 interface Event {
   id?: string | number;
   title: string;
   description: string;
   zone: string;
   zone_id?: string;
-  crime_types: string;   // backend field name
-  published_at?: string; // backend field name
-  source?: string;       // news source name (e.g. "timesofindia")
+  crime_types: string;
+  published_at?: string;
+  source?: string;
   url?: string;
   severity?: string;
 }
@@ -29,8 +28,7 @@ interface Offender { id?: string; name: string; alias: string; fir_count: number
 interface Stats { total_24h: number; critical: number; warning: number; }
 interface SurgeAlert { zone: string; ratio: number; severity: 'SURGE' | 'ELEVATED'; message: string; }
 
-// ─── Plain-language translators ───────────────────────────────────────────
-
+// ─── Plain-language translators ─────────────────────────────────────────────────────
 const riskToAction = (r: string): string => {
   const v = (r || '').toUpperCase();
   if (v === 'CRITICAL') return 'DEPLOY IMMEDIATELY';
@@ -69,7 +67,6 @@ const riskColor = (r?: string) => r === 'High' ? '#FF3B30' : r === 'Medium' ? '#
 const riskBg    = (r?: string) => r === 'High' ? 'rgba(255,59,48,0.1)' : r === 'Medium' ? 'rgba(255,149,0,0.1)' : 'rgba(52,199,89,0.1)';
 const sevColor  = (s?: string) => { const v = (s || '').toUpperCase(); return v === 'CRITICAL' ? '#FF2D55' : v === 'HIGH' ? '#FF3B30' : v === 'MEDIUM' ? '#FF9500' : '#5AC8FA'; };
 
-// Uses crime_types (backend field) — fixes events always showing as LOW
 const deriveSeverity = (ev: Event): string => {
   if (ev.severity) return ev.severity.toUpperCase();
   const ct = (ev.crime_types || '').toUpperCase();
@@ -116,7 +113,7 @@ const ErrorState = ({ msg, onRetry }: { msg: string; onRetry: () => void }) => (
   </div>
 );
 
-// ─── Shared: Intel Brick ──────────────────────────────────────────────────
+// ─── Shared: Intel Brick ────────────────────────────────────────────────────────────────
 function IntelBrick({
   zone, zoneName, headline, detail, action, crimeType, extra, color, index
 }: {
@@ -156,7 +153,7 @@ function IntelBrick({
   );
 }
 
-// ─── WeeklyScheduler ─────────────────────────────────────────────────────
+// ─── WeeklyScheduler ─────────────────────────────────────────────────────────────────
 function WeeklyScheduler({ velocity }: { velocity: ZoneVelocity[] }) {
   const [schedule, setSchedule] = useState<any[]>([]);
   const generate = () => {
@@ -189,7 +186,7 @@ function WeeklyScheduler({ velocity }: { velocity: ZoneVelocity[] }) {
   );
 }
 
-// ─── AI FIR Intake ────────────────────────────────────────────────────
+// ─── AI FIR Intake ─────────────────────────────────────────────────────────────────
 function AIIntakeSection() {
   const [complaint, setComplaint] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -277,7 +274,7 @@ function AIIntakeSection() {
   );
 }
 
-// ─── Neural Node Panel ──────────────────────────────────────────────────
+// ─── Neural Node Panel ────────────────────────────────────────────────────────────────
 function NeuralNodePanel() {
   const [hotspots,  setHotspots]  = useState<any[]>([]);
   const [anomalies, setAnomalies] = useState<any[]>([]);
@@ -375,7 +372,7 @@ function NeuralNodePanel() {
   );
 }
 
-// ─── Anomaly Index Panel ──────────────────────────────────────────────────
+// ─── Anomaly Index Panel ────────────────────────────────────────────────────────────────
 function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
   if (!velocity.length) return <EmptyState icon="⚡" msg="NO VELOCITY DATA" />;
 
@@ -455,96 +452,7 @@ function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
   );
 }
 
-// ─── Intel Stream Panel ────────────────────────────────────────────────────
-function IntelStreamPanel({ events }: { events: Event[] }) {
-  const [filter, setFilter] = useState('ALL');
-  const feedRef = useRef<HTMLDivElement>(null);
-
-  const enriched = events.map(ev => ({ ...ev, severity: deriveSeverity(ev) }));
-  const filtered  = filter === 'ALL' ? enriched : enriched.filter(e => e.severity === filter);
-  const sevCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-  enriched.forEach(e => { const s = e.severity as keyof typeof sevCounts; if (s in sevCounts) sevCounts[s]++; });
-
-  return (
-    <section>
-      <div className="section-label">LIVE INCIDENT FEED</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.04)', marginBottom: '1.5rem' }}>
-        {(['CRITICAL','HIGH','MEDIUM','LOW'] as const).map(s => (
-          <div key={s} className="tactical-card" onClick={() => setFilter(filter === s ? 'ALL' : s)}
-            style={{ textAlign: 'center', padding: '1.25rem', cursor: 'pointer', borderTop: `3px solid ${sevColor(s)}`, opacity: filter === s || filter === 'ALL' ? 1 : 0.3, transition: 'opacity 0.2s' }}>
-            <div style={{ fontSize: '2rem', fontWeight: 900, color: sevColor(s) }}>{sevCounts[s]}</div>
-            <div style={{ fontSize: '0.6rem', fontWeight: 900, color: sevColor(s), marginTop: 4, letterSpacing: 1 }}>{s}</div>
-            <div style={{ fontSize: '0.5rem', color: '#444', marginTop: 2 }}>{s === 'CRITICAL' ? 'Respond now' : s === 'HIGH' ? 'Respond soon' : s === 'MEDIUM' ? 'Monitor' : 'Routine'}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        {['ALL','CRITICAL','HIGH','MEDIUM','LOW'].map(s => (
-          <button key={s} onClick={() => setFilter(s)} style={{
-            padding: '0.4rem 0.9rem', fontSize: '0.55rem', letterSpacing: 2, cursor: 'pointer', transition: 'all 0.2s',
-            fontFamily: 'Space Mono,monospace',
-            border: '1px solid ' + (filter === s ? sevColor(s) : 'rgba(255,255,255,0.08)'),
-            background: filter === s ? sevColor(s) : 'transparent',
-            color: filter === s ? '#000' : '#555',
-          }}>{s}</button>
-        ))}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#34C759', boxShadow: '0 0 8px #34C759', animation: 'pulse 1.5s infinite' }} />
-          <span style={{ fontSize: '0.5rem', color: '#34C759', letterSpacing: 2 }}>LIVE · {enriched.length} INCIDENTS</span>
-        </div>
-      </div>
-      {filtered.length === 0 && <EmptyState icon="📡" msg="NO INCIDENTS MATCH FILTER" />}
-      {filtered.length > 0 && (
-        <div ref={feedRef} style={{ height: '65vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {filtered.map((ev, i) => (
-            <motion.div key={ev.id || i}
-              initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(i * 0.015, 0.5) }}
-              style={{ padding: '1rem 1.5rem', background: 'rgba(255,255,255,0.02)', borderLeft: `3px solid ${sevColor(ev.severity)}`, display: 'flex', alignItems: 'flex-start', gap: '1.5rem' }}
-              whileHover={{ background: 'rgba(255,255,255,0.04)' }}
-            >
-              <div style={{ minWidth: 90, flexShrink: 0 }}>
-                <div style={{ fontSize: '0.6rem', color: sevColor(ev.severity), fontWeight: 900, letterSpacing: 1, marginBottom: 4 }}>
-                  {ev.severity === 'CRITICAL' ? '🔴 CRITICAL' : ev.severity === 'HIGH' ? '🟠 HIGH' : ev.severity === 'MEDIUM' ? '🟡 MEDIUM' : '🔵 LOW'}
-                </div>
-                <div style={{ fontSize: '0.5rem', color: '#444' }}>
-                  {ev.published_at ? new Date(ev.published_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                </div>
-                {ev.published_at && (
-                  <div style={{ fontSize: '0.45rem', color: '#333', marginTop: 1 }}>
-                    {new Date(ev.published_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                  </div>
-                )}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 900, fontSize: '0.75rem', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.title}</div>
-                <div style={{ fontSize: '0.6rem', color: '#666', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.description}</div>
-              </div>
-              <div style={{ minWidth: 90, textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: '0.6rem', color: '#888', letterSpacing: 1, fontWeight: 700 }}>{ev.zone || ev.zone_id || '—'}</div>
-                {ev.crime_types && (
-                  <div style={{ fontSize: '0.5rem', color: '#D2FF00', marginTop: 2 }}>
-                    {ev.crime_types.replace(/_/g, ' ').substring(0, 18)}
-                  </div>
-                )}
-                {ev.source && (
-                  <div style={{ fontSize: '0.45rem', color: '#555', marginTop: 2, letterSpacing: 1 }}>
-                    {ev.source.toUpperCase()}
-                  </div>
-                )}
-                {ev.url && (
-                  <a href={ev.url} target="_blank" rel="noreferrer"
-                    style={{ fontSize: '0.45rem', color: '#00FFFF', marginTop: 2, display: 'block' }}>SOURCE ↗</a>
-                )}
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-// ─── OSINT Scanner Panel ──────────────────────────────────────────────────
+// ─── OSINT Scanner Panel ────────────────────────────────────────────────────────────────
 function OSINTPanel() {
   const [target, setTarget] = useState('');
   const [scanType, setScanType] = useState<'URL' | 'PHONE' | 'NAME'>('URL');
@@ -645,7 +553,7 @@ function OSINTPanel() {
   );
 }
 
-// ─── Main Dashboard ────────────────────────────────────────────────────
+// ─── Main Dashboard ────────────────────────────────────────────────────────────────
 export default function MarvelDashboard() {
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [stats,    setStats]    = useState<Stats | null>(null);
@@ -678,7 +586,7 @@ export default function MarvelDashboard() {
         axios.get('/api/stats'),
         axios.get('/api/velocity'),
         axios.get('/api/alerts'),
-        axios.get('/api/events/recent?limit=200'),
+        axios.get('/api/events/recent?limit=200&hours=3'),
         axios.get('/api/investigation/offenders'),
       ]);
       if (s.status === 'fulfilled') setStats(s.value.data);
@@ -716,7 +624,7 @@ export default function MarvelDashboard() {
     { id: '02', title: 'SPATIAL INTEL',     icon: '🗺️', desc: 'Crime map & zone overview' },
     { id: '03', title: 'NEURAL NODE',       icon: '🧠', desc: 'Where to deploy in next 3 hours' },
     { id: '04', title: 'TACTICAL DEPLOY',   icon: '🎯', desc: 'Patrol scheduling & force allocation' },
-    { id: '05', title: 'INTEL STREAM',      icon: '📡', desc: 'Live incoming incidents' },
+    { id: '05', title: 'INTEL STREAM',      icon: '📡', desc: 'Live incoming incidents — last 3 hours' },
     { id: '06', title: 'OFFENDER PROFILES', icon: '👤', desc: 'Known offenders & re-offending risk' },
     { id: '07', title: 'OSINT SCANNER',     icon: '🔍', desc: 'Check suspicious links & numbers' },
     { id: '08', title: 'AI FIR INTAKE',     icon: '🤖', desc: 'Auto-read and extract FIR details' },
@@ -830,7 +738,8 @@ export default function MarvelDashboard() {
               </section>
             )}
 
-            {activeModule === '05' && <IntelStreamPanel events={events} />}
+            {/* MOD_05: Standalone IntelStreamPanel — self-manages fetch, poll, and new-entry flash */}
+            {activeModule === '05' && <IntelStreamPanel />}
 
             {activeModule === '06' && (() => {
               const filtered = offenders
