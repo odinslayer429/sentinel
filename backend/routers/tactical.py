@@ -7,6 +7,7 @@ Endpoints:
   POST /api/tactical/deploy            — LP optimizer → per-zone officer count + patrol type + dispatch ETA
   GET  /api/tactical/deploy/latest     — last saved deployment (no re-run)
   POST /api/tactical/deploy/full       — deploy + Groq AI briefing in one call  ← showstopper
+  POST /api/tactical/deploy/commit     — deploy/full + auto-creates DispatchTasks for high-risk zones  ← T4
   POST /api/tactical/briefing          — legacy: manual zone input → AI briefing
 """
 
@@ -17,16 +18,19 @@ import json
 import logging
 import asyncio
 import re
+from datetime import datetime
 
 from services.gemini_service import generate
 from services.patrol_optimizer import run_patrol_optimization, get_latest_deployment
 from services.dispatch_ops import get_dispatch_recommendation
+from db.database import SessionLocal
+from db.models import Alert, DispatchTask
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tactical", tags=["Tactical Allocation AI"])
 
 
-# ── Patrol type classifier ─────────────────────────────────────────────────────
+# ── Patrol type classifier ────────────────────────────────────────────────────
 def classify_patrol_type(officers: int, risk: float) -> dict:
     if risk >= 75 and officers >= 5:
         return {"type": "RAPID_RESPONSE",  "formation": "QRV + Fixed Picket"}
@@ -38,13 +42,8 @@ def classify_patrol_type(officers: int, risk: float) -> dict:
         return {"type": "MONITORING",      "formation": "Single officer check-ins"}
 
 
-# ── Safe JSON parser — finds first { ... last } slice, tries json.loads ────────
+# ── Safe JSON parser ──────────────────────────────────────────────────────────
 def _safe_parse(raw: str) -> dict:
-    """
-    Strips markdown fences, finds first { to last }, attempts json.loads.
-    Does NOT walk brace depth (breaks on } inside string values).
-    """
-    # Strip markdown code fences
     text = re.sub(r'```(?:json)?', '', raw).strip()
     s = text.find('{')
     e = text.rfind('}')
@@ -56,7 +55,7 @@ def _safe_parse(raw: str) -> dict:
         return {}
 
 
-# ── Zone enrichment ────────────────────────────────────────────────────────────
+# ── Zone enrichment ───────────────────────────────────────────────────────────
 def _enrich_zones(allocation: list) -> list:
     for zone in allocation:
         zone["patrol_type"] = classify_patrol_type(
@@ -66,17 +65,79 @@ def _enrich_zones(allocation: list) -> list:
     return allocation
 
 
-# ── Per-zone briefing ─────────────────────────────────────────────────────
+# ── T4: Auto-create Alert + DispatchTask for high-risk zones ──────────────────
+def _commit_dispatch_tasks(allocation: list, shift: str, briefings: dict) -> list:
+    """
+    For every zone with risk_score >= 50, creates:
+      - An Alert (severity based on risk)
+      - A DispatchTask linked to that alert (status=PENDING)
+    Returns list of created task IDs.
+    """
+    db = SessionLocal()
+    task_ids = []
+    try:
+        for zone in allocation:
+            if zone["risk_score"] < 50:
+                continue
+
+            severity = "CRITICAL" if zone["risk_score"] >= 75 else "HIGH"
+            briefing = briefings.get(zone["zone_id"], {})
+            priority = briefing.get("priority_action", "Monitor zone activity.")
+            formation = zone["patrol_type"]["formation"]
+
+            # Create alert
+            alert = Alert(
+                title=f"[TACTICAL] {zone['zone']} — {zone['patrol_type']['type']}",
+                message=(
+                    f"Shift: {shift.upper()} | Officers: {zone['officers_assigned']} | "
+                    f"Formation: {formation} | Priority: {priority}"
+                ),
+                severity=severity,
+                zone_id=zone["zone_id"],
+                zone=zone["zone"],
+                is_active=True,
+            )
+            db.add(alert)
+            db.flush()  # get alert.id without full commit
+
+            # Create dispatch task
+            task = DispatchTask(
+                alert_id=alert.id,
+                user_id=1,  # default officer; frontend can reassign
+                status="PENDING",
+                notes=(
+                    f"AUTO-DEPLOYED | {zone['patrol_type']['type']} | "
+                    f"{zone['officers_assigned']} officers | "
+                    f"Nearest: {zone['dispatch']['unit_name']} "
+                    f"({zone['dispatch']['eta_mins']} min) | "
+                    f"Action: {priority}"
+                ),
+            )
+            db.add(task)
+            db.flush()
+            task_ids.append(task.id)
+
+        db.commit()
+        logger.info("Committed %d dispatch tasks for shift=%s", len(task_ids), shift)
+    except Exception as exc:
+        db.rollback()
+        logger.error("Failed to commit dispatch tasks: %s", exc)
+    finally:
+        db.close()
+    return task_ids
+
+
+# ── Per-zone AI briefing ──────────────────────────────────────────────────────
 async def _brief_one_zone(z: dict, scenario: str, day: str, shift: str) -> tuple:
     prompt = f"""[SENTINEL_TACTICAL_AI — MUMBAI POLICE]
 Zone: {z['zone_id']} ({z['zone']}) | Shift: {shift.upper()} | Scenario: {scenario} | Day: {day}
 Officers: {z['officers_assigned']} | Risk: {z['risk_score']:.1f} | Type: {z['patrol_type']['type']}
 Nearest unit: {z['dispatch']['unit_name']} ({z['dispatch']['eta_mins']} min ETA)
 
-Respond with ONLY a JSON object on a single line. No markdown. No explanation. Example format:
+Respond with ONLY a JSON object on a single line. No markdown. No explanation:
 {{"strategic_rollout": "Sentence one. Sentence two.", "shift_advice": "One line.", "priority_action": "One action."}}
 
-Fill in for {z['zone']} using real Mumbai street names and landmarks."""
+Use real Mumbai street names and landmarks for {z['zone']}."""
 
     try:
         raw = await generate(prompt)
@@ -109,9 +170,32 @@ Plain text only — no JSON, no bullet points."""
         return f"Deploy {total} officers across priority zones. Maintain heightened vigilance."
 
 
-# ── T1: Core LP deploy ────────────────────────────────────────────────────────
+# ── Shared deploy + brief logic ───────────────────────────────────────────────
+async def _run_full_deploy(total_officers: int, shift: Optional[str], scenario: str, day: str) -> dict:
+    result = await run_patrol_optimization(total_officers, shift)
+    result["allocation"] = _enrich_zones(result["allocation"])
+
+    top5 = sorted(result["allocation"], key=lambda z: z["risk_score"], reverse=True)[:5]
+    shift_name = result["shift"]
+
+    zone_results, deployment_order = await asyncio.gather(
+        asyncio.gather(*[_brief_one_zone(z, scenario, day, shift_name) for z in top5]),
+        _brief_overall(top5, scenario, day, shift_name, total_officers),
+    )
+
+    briefings = {zid: brief for zid, brief in zone_results}
+    result["briefing"] = {
+        "deployment_order": deployment_order,
+        "briefings": briefings,
+    }
+    return result, briefings
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
 @router.post("/deploy")
 async def deploy(total_officers: int = 60, shift: Optional[str] = None):
+    """LP optimizer only — no AI briefing."""
     result = await run_patrol_optimization(total_officers, shift)
     result["allocation"] = _enrich_zones(result["allocation"])
     return result
@@ -119,10 +203,10 @@ async def deploy(total_officers: int = 60, shift: Optional[str] = None):
 
 @router.get("/deploy/latest")
 def latest_deployment(shift: Optional[str] = None):
+    """Last saved deployment from DB — no recompute."""
     return get_latest_deployment(shift)
 
 
-# ── T3: Full deploy + AI briefing — showstopper ─────────────────────────────
 @router.post("/deploy/full")
 async def deploy_full(
     total_officers: int = 60,
@@ -130,24 +214,31 @@ async def deploy_full(
     scenario: str = "NORMAL",
     day: str = "TUESDAY",
 ):
-    result = await run_patrol_optimization(total_officers, shift)
-    result["allocation"] = _enrich_zones(result["allocation"])
+    """LP + patrol_type + dispatch ETA + AI briefing. No DB writes."""
+    result, _ = await _run_full_deploy(total_officers, shift, scenario, day)
+    return result
 
-    top5 = sorted(result["allocation"], key=lambda z: z["risk_score"], reverse=True)[:5]
-    shift_name = result["shift"]
 
-    zone_tasks = [_brief_one_zone(z, scenario, day, shift_name) for z in top5]
-    order_task = _brief_overall(top5, scenario, day, shift_name, total_officers)
+@router.post("/deploy/commit")
+async def deploy_commit(
+    total_officers: int = 60,
+    shift: Optional[str] = None,
+    scenario: str = "NORMAL",
+    day: str = "TUESDAY",
+):
+    """
+    Full deploy + AI briefing + auto-creates Alert + DispatchTask
+    for every high-risk zone (risk >= 50). Returns task IDs.
+    This is the production command endpoint.
+    """
+    result, briefings = await _run_full_deploy(total_officers, shift, scenario, day)
 
-    zone_results, deployment_order = await asyncio.gather(
-        asyncio.gather(*zone_tasks),
-        order_task,
+    # T4: commit dispatch tasks for high-risk zones
+    task_ids = _commit_dispatch_tasks(
+        result["allocation"], result["shift"], briefings
     )
-
-    result["briefing"] = {
-        "deployment_order": deployment_order,
-        "briefings": {zid: brief for zid, brief in zone_results},
-    }
+    result["dispatch_tasks_created"] = task_ids
+    result["committed_at"] = datetime.utcnow().isoformat()
     return result
 
 
