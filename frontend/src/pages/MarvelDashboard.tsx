@@ -10,14 +10,26 @@ import CrimeMap from '../components/CrimeMap';
 // ─── Types ────────────────────────────────────────────────────────────
 interface ZoneVelocity { zone_id: string; zone_name: string; z_score: number; current_1h: number; mean_1h: number; score?: number; }
 interface Alert { zone: string; message: string; severity: string; }
-interface Event { id?: string; title: string; description: string; zone: string; crime_type: string; created_at?: string; ingested_at?: string; timestamp?: string; url?: string; severity?: string; }
+// Field names match the backend EventOut schema exactly:
+//   crime_types (not crime_type), published_at (not created_at/ingested_at)
+interface Event {
+  id?: string | number;
+  title: string;
+  description: string;
+  zone: string;
+  zone_id?: string;
+  crime_types: string;   // backend field name
+  published_at?: string; // backend field name
+  source?: string;       // news source name (e.g. "timesofindia")
+  url?: string;
+  severity?: string;
+}
 interface Offender { id?: string; name: string; alias: string; fir_count: number; last_seen: string; zones: string | string[]; predicted_risk?: 'High' | 'Medium' | 'Low'; intervention_protocol?: string; recidivism_probability?: number; }
 interface Stats { total_24h: number; critical: number; warning: number; }
 interface SurgeAlert { zone: string; ratio: number; severity: 'SURGE' | 'ELEVATED'; message: string; }
 
 // ─── Plain-language translators ───────────────────────────────────────
 
-// Converts ML risk_level → officer action instruction
 const riskToAction = (r: string): string => {
   const v = (r || '').toUpperCase();
   if (v === 'CRITICAL') return 'DEPLOY IMMEDIATELY';
@@ -26,7 +38,6 @@ const riskToAction = (r: string): string => {
   return 'ROUTINE PATROL';
 };
 
-// Converts z_score (velocity anomaly) → plain English heat label
 const zToHeat = (z: number): { label: string; sub: string; color: string } => {
   if (z > 5) return { label: 'EXTREME SPIKE', sub: 'Far above normal — send backup now', color: '#FF2D55' };
   if (z > 3) return { label: 'HIGH ALERT',    sub: 'Well above normal — deploy extra units', color: '#FF3B30' };
@@ -36,7 +47,6 @@ const zToHeat = (z: number): { label: string; sub: string; color: string } => {
   return { label: 'QUIET',                     sub: 'Below average activity', color: '#5AC8FA' };
 };
 
-// Converts Hawkes predicted_intensity → officer-readable urgency
 const intensityToUrgency = (intensity: number, crimes24h: number): { label: string; detail: string; color: string } => {
   if (intensity > 2.5) return { label: 'EXPECT SURGE', detail: `${crimes24h} incidents yesterday — high chance of more in next 3 hrs`, color: '#FF3B30' };
   if (intensity > 1.5) return { label: 'LIKELY ACTIVE', detail: `${crimes24h} incidents yesterday — above average activity expected`, color: '#FF9500' };
@@ -44,7 +54,6 @@ const intensityToUrgency = (intensity: number, crimes24h: number): { label: stri
   return { label: 'CALM', detail: `${crimes24h} incidents yesterday — no surge expected`, color: '#34C759' };
 };
 
-// Converts anomaly severity + z_score → plain officer note
 const anomalyToNote = (severity: string, latestCount: number, meanDaily: number): { headline: string; detail: string; color: string } => {
   const excess = Math.max(0, latestCount - Math.round(meanDaily));
   const s = (severity || '').toUpperCase();
@@ -59,9 +68,10 @@ const riskColor = (r?: string) => r === 'High' ? '#FF3B30' : r === 'Medium' ? '#
 const riskBg    = (r?: string) => r === 'High' ? 'rgba(255,59,48,0.1)' : r === 'Medium' ? 'rgba(255,149,0,0.1)' : 'rgba(52,199,89,0.1)';
 const sevColor  = (s?: string) => { const v = (s || '').toUpperCase(); return v === 'CRITICAL' ? '#FF2D55' : v === 'HIGH' ? '#FF3B30' : v === 'MEDIUM' ? '#FF9500' : '#5AC8FA'; };
 
+// Uses crime_types (backend field) — fixes events always showing as LOW
 const deriveSeverity = (ev: Event): string => {
   if (ev.severity) return ev.severity.toUpperCase();
-  const ct = (ev.crime_type || '').toUpperCase();
+  const ct = (ev.crime_types || '').toUpperCase();
   if (ct.includes('MURDER') || ct.includes('RAPE') || ct.includes('KIDNAP') || ct.includes('DACOITY')) return 'CRITICAL';
   if (ct.includes('ROBBERY') || ct.includes('ASSAULT') || ct.includes('RIOT') || ct.includes('ARSON'))  return 'HIGH';
   if (ct.includes('THEFT') || ct.includes('BURGLARY') || ct.includes('FRAUD') || ct.includes('CYBER'))  return 'MEDIUM';
@@ -106,7 +116,6 @@ const ErrorState = ({ msg, onRetry }: { msg: string; onRetry: () => void }) => (
 );
 
 // ─── Shared: Intel Brick ──────────────────────────────────────────────
-// A single coloured card block — the core UI atom for officer-readable info
 function IntelBrick({
   zone, zoneName, headline, detail, action, crimeType, extra, color, index
 }: {
@@ -119,7 +128,6 @@ function IntelBrick({
       className="tactical-card"
       style={{ padding: '1.5rem', borderLeft: `3px solid ${color}`, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}
     >
-      {/* Zone identifier */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: '0.5rem', color: '#555', letterSpacing: 3 }}>ZONE</div>
@@ -135,21 +143,13 @@ function IntelBrick({
           </div>
         )}
       </div>
-
-      {/* Headline status */}
       <div style={{ fontSize: '0.85rem', fontWeight: 900, color, letterSpacing: 1 }}>{headline}</div>
-
-      {/* Plain-English detail */}
       <div style={{ fontSize: '0.65rem', color: '#aaa', lineHeight: 1.6 }}>{detail}</div>
-
-      {/* Crime type chip */}
       {crimeType && (
         <div style={{ display: 'inline-block', padding: '3px 10px', fontSize: '0.55rem', letterSpacing: 1, border: '1px solid rgba(210,255,0,0.2)', color: '#D2FF00', background: 'rgba(210,255,0,0.06)', alignSelf: 'flex-start' }}>
           {crimeType.replace(/_/g, ' ')}
         </div>
       )}
-
-      {/* Extra note */}
       {extra && <div style={{ fontSize: '0.5rem', color: '#555', letterSpacing: 1, borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '0.4rem', marginTop: '0.2rem' }}>{extra}</div>}
     </motion.div>
   );
@@ -276,7 +276,7 @@ function AIIntakeSection() {
   );
 }
 
-// ─── Neural Node Panel — plain-language intelligence bricks ──────────
+// ─── Neural Node Panel ────────────────────────────────────────────────
 function NeuralNodePanel() {
   const [hotspots,  setHotspots]  = useState<any[]>([]);
   const [anomalies, setAnomalies] = useState<any[]>([]);
@@ -312,16 +312,11 @@ function NeuralNodePanel() {
   return (
     <section>
       <div className="section-label">CRIME PREDICTIONS // NEXT 3 HOURS</div>
-
-      {/* Top-line summary — three big numbers */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.04)', marginBottom: '2rem' }}>
         {[
-          { label: 'ZONES TO DEPLOY TO NOW', val: criticalCount, color: '#FF3B30',
-            note: 'These zones need officers right now' },
-          { label: 'ZONES WITH UNUSUAL SPIKES', val: spikeCount, color: '#FF9500',
-            note: 'More crimes than normal today' },
-          { label: 'ZONES UNDER FORECAST', val: forecast.length, color: '#D2FF00',
-            note: 'Being actively monitored by system' },
+          { label: 'ZONES TO DEPLOY TO NOW', val: criticalCount, color: '#FF3B30', note: 'These zones need officers right now' },
+          { label: 'ZONES WITH UNUSUAL SPIKES', val: spikeCount, color: '#FF9500', note: 'More crimes than normal today' },
+          { label: 'ZONES UNDER FORECAST', val: forecast.length, color: '#D2FF00', note: 'Being actively monitored by system' },
         ].map((s, i) => (
           <div key={i} className="tactical-card" style={{ textAlign: 'center', padding: '1.5rem' }}>
             <div style={{ fontSize: '2.5rem', fontWeight: 900, color: s.color, textShadow: `0 0 16px ${s.color}` }}>{s.val}</div>
@@ -330,8 +325,6 @@ function NeuralNodePanel() {
           </div>
         ))}
       </div>
-
-      {/* Predicted hotspot bricks */}
       {hotspots.length > 0 && (
         <>
           <div className="section-label" style={{ marginBottom: '1rem' }}>WHERE TO SEND OFFICERS — NEXT 3 HOURS</div>
@@ -339,22 +332,13 @@ function NeuralNodePanel() {
             {hotspots.map((h, i) => {
               const urg = intensityToUrgency(h.predicted_intensity, h.crimes_last_24h);
               return (
-                <IntelBrick
-                  key={i} index={i}
-                  zone={h.zone_id}
-                  headline={urg.label}
-                  detail={urg.detail}
-                  action={riskToAction(h.risk_level)}
-                  crimeType={h.top_crime_type}
-                  color={urg.color}
-                />
+                <IntelBrick key={i} index={i} zone={h.zone_id} headline={urg.label} detail={urg.detail}
+                  action={riskToAction(h.risk_level)} crimeType={h.top_crime_type} color={urg.color} />
               );
             })}
           </div>
         </>
       )}
-
-      {/* Anomaly bricks — "unusual activity today" */}
       {anomalies.length > 0 && (
         <>
           <div className="section-label" style={{ marginBottom: '1rem' }}>ZONES WITH UNUSUAL ACTIVITY TODAY</div>
@@ -362,22 +346,14 @@ function NeuralNodePanel() {
             {anomalies.map((a, i) => {
               const note = anomalyToNote(a.severity, a.latest_count, a.mean_daily);
               return (
-                <IntelBrick
-                  key={i} index={i}
-                  zone={a.zone_id}
-                  headline={note.headline}
-                  detail={note.detail}
-                  action={riskToAction(a.severity)}
-                  color={note.color}
-                  extra={`30-DAY AVERAGE: ${Math.round(a.mean_daily)} crimes/day`}
-                />
+                <IntelBrick key={i} index={i} zone={a.zone_id} headline={note.headline} detail={note.detail}
+                  action={riskToAction(a.severity)} color={note.color}
+                  extra={`30-DAY AVERAGE: ${Math.round(a.mean_daily)} crimes/day`} />
               );
             })}
           </div>
         </>
       )}
-
-      {/* Forecast bricks — what each zone is expected to do */}
       {forecast.length > 0 && (
         <>
           <div className="section-label" style={{ marginBottom: '1rem' }}>6-HOUR OUTLOOK PER ZONE</div>
@@ -385,17 +361,10 @@ function NeuralNodePanel() {
             {forecast.map((f, i) => {
               const peakLabel = f.peak_risk === 'CRITICAL' ? 'PEAK DANGER EXPECTED' : f.peak_risk === 'HIGH' ? 'HIGH ACTIVITY EXPECTED' : 'MODERATE ACTIVITY';
               const peakColor = f.peak_risk === 'CRITICAL' ? '#FF3B30' : f.peak_risk === 'HIGH' ? '#FF9500' : '#D2FF00';
-              const peakHour  = f.peak_hour_offset;
               return (
-                <IntelBrick
-                  key={i} index={i}
-                  zone={f.zone_id}
-                  headline={peakLabel}
-                  detail={`Peak activity expected in ${peakHour} hour${peakHour !== 1 ? 's' : ''}. ${f.crime_count_24h} incidents in last 24 hrs.`}
-                  action={riskToAction(f.peak_risk)}
-                  color={peakColor}
-                  extra={`FORECAST WINDOW: 6 HOURS`}
-                />
+                <IntelBrick key={i} index={i} zone={f.zone_id} headline={peakLabel}
+                  detail={`Peak activity expected in ${f.peak_hour_offset} hour${f.peak_hour_offset !== 1 ? 's' : ''}. ${f.crime_count_24h} incidents in last 24 hrs.`}
+                  action={riskToAction(f.peak_risk)} color={peakColor} extra="FORECAST WINDOW: 6 HOURS" />
               );
             })}
           </div>
@@ -405,7 +374,7 @@ function NeuralNodePanel() {
   );
 }
 
-// ─── Anomaly Index Panel — plain-language velocity bricks ─────────────
+// ─── Anomaly Index Panel ──────────────────────────────────────────────
 function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
   if (!velocity.length) return <EmptyState icon="⚡" msg="NO VELOCITY DATA" />;
 
@@ -417,8 +386,6 @@ function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
   return (
     <section>
       <div className="section-label">ACTIVITY LEVELS // RIGHT NOW</div>
-
-      {/* Big-number summary */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.04)', marginBottom: '2rem' }}>
         {[
           { label: 'SURGING ZONES',  val: surging.length,  color: '#FF3B30', note: 'Well above normal — send units' },
@@ -432,8 +399,6 @@ function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
           </div>
         ))}
       </div>
-
-      {/* Surging zones — urgent bricks first */}
       {surging.length > 0 && (
         <>
           <div className="section-label" style={{ color: '#FF3B30', marginBottom: '1rem' }}>⚠ NEEDS IMMEDIATE ATTENTION</div>
@@ -441,20 +406,14 @@ function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
             {surging.map((z, i) => {
               const h = zToHeat(z.z_score);
               return (
-                <IntelBrick key={z.zone_id} index={i}
-                  zone={z.zone_id} zoneName={z.zone_name}
-                  headline={h.label}
-                  detail={`${z.current_1h} incidents this hour vs usual ${z.mean_1h?.toFixed(0)} per hour. ${h.sub}.`}
-                  action="DEPLOY IMMEDIATELY"
-                  color={h.color}
-                />
+                <IntelBrick key={z.zone_id} index={i} zone={z.zone_id} zoneName={z.zone_name}
+                  headline={h.label} detail={`${z.current_1h} incidents this hour vs usual ${z.mean_1h?.toFixed(0)} per hour. ${h.sub}.`}
+                  action="DEPLOY IMMEDIATELY" color={h.color} />
               );
             })}
           </div>
         </>
       )}
-
-      {/* Elevated zones */}
       {elevated.length > 0 && (
         <>
           <div className="section-label" style={{ color: '#FF9500', marginBottom: '1rem' }}>↑ ABOVE NORMAL — INCREASE PATROLS</div>
@@ -462,20 +421,14 @@ function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
             {elevated.map((z, i) => {
               const h = zToHeat(z.z_score);
               return (
-                <IntelBrick key={z.zone_id} index={i}
-                  zone={z.zone_id} zoneName={z.zone_name}
-                  headline={h.label}
-                  detail={`${z.current_1h} incidents this hour vs usual ${z.mean_1h?.toFixed(0)} per hour.`}
-                  action="INCREASE PATROLS"
-                  color={h.color}
-                />
+                <IntelBrick key={z.zone_id} index={i} zone={z.zone_id} zoneName={z.zone_name}
+                  headline={h.label} detail={`${z.current_1h} incidents this hour vs usual ${z.mean_1h?.toFixed(0)} per hour.`}
+                  action="INCREASE PATROLS" color={h.color} />
               );
             })}
           </div>
         </>
       )}
-
-      {/* Normal/quiet zones — collapsed list */}
       {normal.length > 0 && (
         <>
           <div className="section-label" style={{ color: '#34C759', marginBottom: '1rem' }}>● NORMAL / QUIET ZONES</div>
@@ -501,28 +454,22 @@ function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
   );
 }
 
-// ─── Intel Stream Panel ───────────────────────────────────────────────
+// ─── Intel Stream Panel — wired to live /api/events backend ──────────
 function IntelStreamPanel({ events }: { events: Event[] }) {
   const [filter, setFilter] = useState('ALL');
   const feedRef = useRef<HTMLDivElement>(null);
 
+  // deriveSeverity now uses ev.crime_types (correct backend field)
   const enriched = events.map(ev => ({ ...ev, severity: deriveSeverity(ev) }));
   const filtered  = filter === 'ALL' ? enriched : enriched.filter(e => e.severity === filter);
   const sevCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
   enriched.forEach(e => { const s = e.severity as keyof typeof sevCounts; if (s in sevCounts) sevCounts[s]++; });
 
-  const SEV_LABELS: Record<string,string> = {
-    CRITICAL: 'CRITICAL — Needs response now',
-    HIGH:     'HIGH — Respond soon',
-    MEDIUM:   'MEDIUM — Monitor',
-    LOW:      'LOW — Routine'
-  };
-
   return (
     <section>
       <div className="section-label">LIVE INCIDENT FEED</div>
 
-      {/* Severity summary — clickable filter tiles */}
+      {/* Severity summary tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.04)', marginBottom: '1.5rem' }}>
         {(['CRITICAL','HIGH','MEDIUM','LOW'] as const).map(s => (
           <div key={s} className="tactical-card" onClick={() => setFilter(filter === s ? 'ALL' : s)}
@@ -534,6 +481,7 @@ function IntelStreamPanel({ events }: { events: Event[] }) {
         ))}
       </div>
 
+      {/* Filter bar + live indicator */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
         {['ALL','CRITICAL','HIGH','MEDIUM','LOW'].map(s => (
           <button key={s} onClick={() => setFilter(s)} style={{
@@ -559,26 +507,47 @@ function IntelStreamPanel({ events }: { events: Event[] }) {
               style={{ padding: '1rem 1.5rem', background: 'rgba(255,255,255,0.02)', borderLeft: `3px solid ${sevColor(ev.severity)}`, display: 'flex', alignItems: 'flex-start', gap: '1.5rem' }}
               whileHover={{ background: 'rgba(255,255,255,0.04)' }}
             >
-              {/* Severity + time */}
+              {/* Severity + time — uses published_at (correct backend field) */}
               <div style={{ minWidth: 90, flexShrink: 0 }}>
                 <div style={{ fontSize: '0.6rem', color: sevColor(ev.severity), fontWeight: 900, letterSpacing: 1, marginBottom: 4 }}>
                   {ev.severity === 'CRITICAL' ? '🔴 CRITICAL' : ev.severity === 'HIGH' ? '🟠 HIGH' : ev.severity === 'MEDIUM' ? '🟡 MEDIUM' : '🔵 LOW'}
                 </div>
                 <div style={{ fontSize: '0.5rem', color: '#444' }}>
-                  {ev.created_at ? new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                   : ev.ingested_at ? new Date(ev.ingested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                  {ev.published_at
+                    ? new Date(ev.published_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : '--:--'}
                 </div>
+                {/* Date on second line if timestamp is old */}
+                {ev.published_at && (
+                  <div style={{ fontSize: '0.45rem', color: '#333', marginTop: 1 }}>
+                    {new Date(ev.published_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                  </div>
+                )}
               </div>
+
               {/* Title + description */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 900, fontSize: '0.75rem', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.title}</div>
                 <div style={{ fontSize: '0.6rem', color: '#666', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.description}</div>
               </div>
-              {/* Zone + crime type + source link */}
-              <div style={{ minWidth: 80, textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: '0.6rem', color: '#888', letterSpacing: 1, fontWeight: 700 }}>{ev.zone || '—'}</div>
-                {ev.crime_type && <div style={{ fontSize: '0.5rem', color: '#D2FF00', marginTop: 2 }}>{ev.crime_type.replace(/_/g, ' ').substring(0, 16)}</div>}
-                {ev.url && <a href={ev.url} target="_blank" rel="noreferrer" style={{ fontSize: '0.45rem', color: '#00FFFF', marginTop: 2, display: 'block' }}>SOURCE ↗</a>}
+
+              {/* Zone + crime type + source + link */}
+              <div style={{ minWidth: 90, textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontSize: '0.6rem', color: '#888', letterSpacing: 1, fontWeight: 700 }}>{ev.zone || ev.zone_id || '—'}</div>
+                {ev.crime_types && (
+                  <div style={{ fontSize: '0.5rem', color: '#D2FF00', marginTop: 2 }}>
+                    {ev.crime_types.replace(/_/g, ' ').substring(0, 18)}
+                  </div>
+                )}
+                {ev.source && (
+                  <div style={{ fontSize: '0.45rem', color: '#555', marginTop: 2, letterSpacing: 1 }}>
+                    {ev.source.toUpperCase()}
+                  </div>
+                )}
+                {ev.url && (
+                  <a href={ev.url} target="_blank" rel="noreferrer"
+                    style={{ fontSize: '0.45rem', color: '#00FFFF', marginTop: 2, display: 'block' }}>SOURCE ↗</a>
+                )}
               </div>
             </motion.div>
           ))}
@@ -658,11 +627,9 @@ function OSINTPanel() {
       {result && !loading && (
         <motion.div initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }}
           className="tactical-card" style={{ marginTop: '1.5rem', borderLeft: `4px solid ${verdictColor(result.verdict)}` }}>
-
           {result.source === 'HEURISTIC' && (
             <div style={{ fontSize: '0.55rem', color: '#FF9500', letterSpacing: 2, marginBottom: '1rem', padding: '0.5rem', background: 'rgba(255,149,0,0.08)', border: '1px solid rgba(255,149,0,0.2)' }}>⚠ BASIC CHECK ONLY — Backend scanner not connected. Results are based on link/number patterns.</div>
           )}
-
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
             <div>
               <div style={{ fontSize: '0.55rem', color: '#555', letterSpacing: 2 }}>VERDICT</div>
@@ -674,9 +641,7 @@ function OSINTPanel() {
               <div style={{ fontSize: '0.5rem', color: '#444' }}>out of 100</div>
             </div>
           </div>
-
           <div style={{ fontSize: '0.6rem', color: '#666', wordBreak: 'break-all', marginBottom: '1rem', padding: '0.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: 2 }}>{result.target}</div>
-
           {result.flags?.length > 0 && (
             <div>
               <div style={{ fontSize: '0.55rem', color: '#FF3B30', fontWeight: 900, letterSpacing: 2, marginBottom: '0.5rem' }}>PROBLEMS FOUND</div>
@@ -723,18 +688,22 @@ export default function MarvelDashboard() {
   const fetchAll = useCallback(async () => {
     try {
       const [s, v, a, e, o] = await Promise.allSettled([
-        axios.get('/api/stats'), axios.get('/api/velocity'), axios.get('/api/alerts'),
-        axios.get('/api/events'), axios.get('/api/investigation/offenders'),
+        axios.get('/api/stats'),
+        axios.get('/api/velocity'),
+        axios.get('/api/alerts'),
+        // Fetch up to 200 live events sorted newest-first
+        axios.get('/api/events/recent?limit=200'),
+        axios.get('/api/investigation/offenders'),
       ]);
       if (s.status === 'fulfilled') setStats(s.value.data);
       if (v.status === 'fulfilled') setVelocity(Array.isArray(v.value.data) ? v.value.data : v.value.data.zones || []);
       if (a.status === 'fulfilled') setAlerts(Array.isArray(a.value.data) ? a.value.data : a.value.data.alerts || []);
       if (e.status === 'fulfilled') {
         const raw = e.value.data;
-        const evs = (Array.isArray(raw) ? raw : raw.events || raw.items || []).slice(0, 200);
+        const evs = (Array.isArray(raw) ? raw : raw.events || raw.items || []) as Event[];
         setEvents(evs); setSurges(detectSurges(evs));
         if (evs.length > 0 && (window as any).triggerSonicPulse) {
-          const latest = evs[0]; const coords = ZONE_CENTERS[latest.zone];
+          const latest = evs[0]; const coords = ZONE_CENTERS[latest.zone_id || latest.zone];
           if (coords) (window as any).triggerSonicPulse(coords[0], coords[1], deriveSeverity(latest) === 'CRITICAL' ? 'HIGH' : 'STABLE');
         }
       }
