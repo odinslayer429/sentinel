@@ -2,7 +2,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, GeoJSON, CircleMarker, useMap } from 'react-leaflet';
 import axios from 'axios';
 import 'leaflet/dist/leaflet.css';
-import { usePredictions, ZonePrediction } from '../hooks/usePredictions';
+import { usePredictions } from '../hooks/usePredictions';
+import type { ZonePrediction } from '../hooks/usePredictions';
 
 /* ─── Types ──────────────────────────────────────────────────── */
 interface Zone {
@@ -240,11 +241,10 @@ function PredictionPanel({ zone, pred, loading, onClose }: PanelProps) {
                       {pct}%
                     </span>
                   </div>
-                  {/* probability bar */}
                   <div style={{ height: '4px', background: '#111', borderRadius: '2px' }}>
                     <div style={{
                       height: '100%',
-                      width: `${Math.min(pct * 3.5, 100)}%`,  // scale up for visibility
+                      width: `${Math.min(pct * 3.5, 100)}%`,
                       background: barColor,
                       borderRadius: '2px',
                       transition: 'width 0.5s ease',
@@ -278,8 +278,7 @@ function PredictionPanel({ zone, pred, loading, onClose }: PanelProps) {
   );
 }
 
-/* ─── ML Badge overlay on CircleMarker ──────────────────────── */
-// Shows a tiny coloured ring whose colour reflects the top ML risk level
+/* ─── ML Badge ────────────────────────────────────────────────── */
 function MLBadge({ zone, topRisk }: { zone: Zone; topRisk: string | null }) {
   if (!topRisk) return null;
   const badgeColor = mlRiskColor(topRisk);
@@ -305,7 +304,6 @@ export default function CrimeMap() {
 
   const { predMap, lastUpdated, fetchZone } = usePredictions(60_000);
 
-  // Load zones once
   useEffect(() => {
     axios.get('/api/zones')
       .then(r => {
@@ -316,13 +314,12 @@ export default function CrimeMap() {
       .finally(() => setLoading(false));
   }, []);
 
-  // When a zone is clicked, fetch its prediction
   const handleZoneClick = useCallback(async (zone: Zone) => {
     setSelected(zone);
     setPanelPred(null);
     setPanelLoading(true);
-    const now   = new Date();
-    const pred  = await fetchZone(
+    const now  = new Date();
+    const pred = await fetchZone(
       zone.zone_id,
       now.getHours(),
       now.getDay(),
@@ -348,9 +345,7 @@ export default function CrimeMap() {
   return (
     <div style={{ height: '100%', width: '100%', position: 'relative', display: 'flex' }}>
 
-      {/* ── Map area ── */}
       <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-
         {/* Status bar */}
         <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, display: 'flex', gap: '8px', alignItems: 'center' }}>
           <div style={{ background: '#000', border: '1px solid #D2FF00', padding: '4px 10px',
@@ -378,7 +373,6 @@ export default function CrimeMap() {
             attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           />
 
-          {/* Choropleth */}
           <GeoJSON
             key={`zones-${zones.length}`}
             data={geoData}
@@ -390,13 +384,9 @@ export default function CrimeMap() {
               const z = feature.properties as Zone;
               const color = riskColor(z.risk_score);
               const hasML = z.hawkes_intensity > 0;
-
-              // Tooltip
               layer.bindTooltip(`
                 <div style="background:#000;border:1px solid ${color};padding:10px 14px;font-family:'Space Mono',monospace;font-size:11px;color:#fff;min-width:200px;line-height:1.8">
-                  <div style="color:${color};font-weight:900;letter-spacing:2px;margin-bottom:8px;font-size:12px">
-                    ${z.zone_id} // ${z.zone_name.toUpperCase()}
-                  </div>
+                  <div style="color:${color};font-weight:900;letter-spacing:2px;margin-bottom:8px;font-size:12px">${z.zone_id} // ${z.zone_name.toUpperCase()}</div>
                   <div>STATUS: <span style="color:${color};font-weight:900">${riskLabel(z.risk_score)}</span></div>
                   <div>RISK SCORE: <span style="color:${color}">${z.risk_score?.toFixed(2)}</span></div>
                   <div>TREND: <span style="color:#D2FF00">${trendIcon(z.trend)} ${z.trend}</span></div>
@@ -409,34 +399,27 @@ export default function CrimeMap() {
                   <div style="color:#555;font-size:9px;margin-top:6px;letter-spacing:1px">CLICK FOR ML FORECAST →</div>
                 </div>
               `, { className: 'sentinel-tooltip', sticky: true });
-
-              // Click → open panel
               layer.on('click', () => handleZoneClick(z));
             }}
           />
 
-          {/* Center dots */}
           {zones.map(zone => (
             <CircleMarker key={zone.zone_id} center={[zone.lat, zone.lon]} radius={3}
               pathOptions={{ color: '#fff', fillColor: '#fff', fillOpacity: 0.9, weight: 1 }}
             />
           ))}
 
-          {/* ML badge rings (auto-updated from 60s poll) */}
           {zones.map(zone => {
             const p = predMap[zone.zone_id];
             const topRisk = p?.predictions?.[0]?.risk_level ?? null;
             return <MLBadge key={`badge-${zone.zone_id}`} zone={zone} topRisk={topRisk} />;
           })}
 
-          {/* Hawkes pulse rings */}
           <MLPulseRings zones={zones} />
-
           <Legend />
         </MapContainer>
       </div>
 
-      {/* ── Side panel ── */}
       {selected && (
         <div style={{ width: '300px', position: 'relative', flexShrink: 0 }}>
           <PredictionPanel
