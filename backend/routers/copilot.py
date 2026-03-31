@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Body, HTTPException
 from pydantic import BaseModel
 from typing import List
-from services.ml_models import ml_service
 from services.gemini_service import generate
 import json
 
@@ -27,7 +26,6 @@ async def summarize_fir(req: FIRRequest):
 
     try:
         result = await generate(prompt)
-        # Handle cases where LLM returns extra text or md blocks
         start = result.find('{')
         end = result.rfind('}') + 1
         if start != -1 and end != -1:
