@@ -1,9 +1,9 @@
-﻿from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 from typing import Optional, List
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 from db.database import SessionLocal
 from db.models import CrimeEvent, ZoneRiskScore
 
@@ -27,7 +27,9 @@ class EventOut(BaseModel):
     zone_lon: Optional[float]
     severity: Optional[str]
     published_at: Optional[datetime]
+    ingested_at: Optional[datetime]
     source: Optional[str]
+    url: Optional[str]          # live hyperlink to source article
     is_processed: Optional[bool]
     class Config:
         from_attributes = True
@@ -61,8 +63,37 @@ def summary(db: Session = Depends(get_db)):
     )
 
 @router.get("/recent", response_model=List[EventOut])
-def recent(limit: int = Query(10, ge=1, le=50), db: Session = Depends(get_db)):
-    return db.query(CrimeEvent).order_by(desc(CrimeEvent.published_at)).limit(limit).all()
+def recent(
+    limit: int = Query(200, ge=1, le=500),
+    hours: int = Query(3, ge=1, le=168),   # default: last 3 hours, max 7 days
+    since: Optional[datetime] = None,       # explicit ISO cutoff overrides hours
+    db: Session = Depends(get_db),
+):
+    """
+    Return recent crime events.
+    - `hours`  (default 3)  — look back N hours from now.
+    - `since`               — explicit ISO-8601 datetime cutoff (overrides hours).
+    - `limit`  (default 200) — max rows returned.
+    Falls back to last `limit` rows across all time if the time-window returns nothing.
+    """
+    cutoff = since if since else (datetime.utcnow() - timedelta(hours=hours))
+    q = (
+        db.query(CrimeEvent)
+        .filter(CrimeEvent.published_at >= cutoff)
+        .order_by(desc(CrimeEvent.published_at))
+        .limit(limit)
+    )
+    results = q.all()
+
+    # Fallback: if window is empty (fresh DB / no recent data) return latest rows
+    if not results:
+        results = (
+            db.query(CrimeEvent)
+            .order_by(desc(CrimeEvent.published_at))
+            .limit(limit)
+            .all()
+        )
+    return results
 
 @router.get("/by-type")
 def by_type(db: Session = Depends(get_db)):
