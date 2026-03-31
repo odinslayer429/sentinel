@@ -12,7 +12,7 @@ from jose import JWTError, jwt
 from routers.tactical import router as tactical_router
 from services.ws_manager import manager
 from services.redis_pubsub import redis_subscriber
-from services.news_ingester import fetch_crime_news
+from services.news_ingester import fetch_crime_news, ingest_crime_news
 
 from routers.auth import router as auth_router
 from routers.ml_engine import router as ml_router
@@ -35,11 +35,9 @@ from routers.predict import router as predict_api_router
 from routers.fir import router as fir_router
 from routers.social import router as social_router
 
-# ── Auth config (mirrors routers/auth.py) ─────────────────────────────────────
 SECRET_KEY = os.getenv("SECRET_KEY", "sentinel-secret-key-change-in-production-2026")
 ALGORITHM  = "HS256"
 
-# Routes that do NOT require a JWT token
 OPEN_PREFIXES = [
     "/api/public", "/api/events", "/api/alerts",
     "/api/fir",    "/api/velocity", "/api/zones",
@@ -50,53 +48,67 @@ OPEN_PREFIXES = [
     "/docs", "/openapi.json", "/ws", "/redoc", "/",
 ]
 
+# ── Background news ingestion loop (every 30 min) ─────────────────────────────
+NEWS_INGEST_INTERVAL = 30 * 60   # seconds
+
+async def _news_ingest_loop():
+    """Run on startup then every 30 minutes for the lifetime of the server."""
+    while True:
+        try:
+            loop = asyncio.get_event_loop()
+            n = await loop.run_in_executor(None, ingest_crime_news)
+            print(f"[NEWS] Auto-ingest complete — {n} new articles written to DB")
+        except Exception as exc:
+            print(f"[NEWS] Auto-ingest error: {exc}")
+        await asyncio.sleep(NEWS_INGEST_INTERVAL)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 1. Start Redis subscriber
     subscribe_task = asyncio.create_task(redis_subscriber.start())
-    print("[STARTUP] Sentinel backend & Redis subscriber online")
+
+    # 2. Kick off real news ingestion immediately on startup, then every 30 min
+    news_task = asyncio.create_task(_news_ingest_loop())
+    print("[STARTUP] Sentinel backend online — news ingestion started")
+
     yield
+
+    # Cleanup
     subscribe_task.cancel()
-    try:
-        await subscribe_task
-    except asyncio.CancelledError:
-        print("[SHUTDOWN] Redis subscriber cancelled")
+    news_task.cancel()
+    for t in (subscribe_task, news_task):
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
+    print("[SHUTDOWN] Background tasks cancelled")
 
 
 app = FastAPI(title="Sentinel Full Backend", lifespan=lifespan)
 
-# ── CORS ─────────────────────────────────────────────────────────────────────
-# Read allowed origins from env; fallback to localhost for local dev only.
+# ── CORS ──────────────────────────────────────────────────────────────────────
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173")
 ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,       # explicit origins, never wildcard with credentials
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ── JWT Auth Enforcement Middleware ──────────────────────────────────────────
+# ── JWT Auth Enforcement Middleware ───────────────────────────────────────────
 @app.middleware("http")
 async def enforce_jwt_auth(request: Request, call_next):
-    """
-    Validates Bearer JWT on every request EXCEPT open prefixes.
-    Returns 401 immediately for missing / invalid tokens on protected routes.
-    """
     path = request.url.path
-
-    # Skip auth for open routes
     if any(path.startswith(p) for p in OPEN_PREFIXES):
         return await call_next(request)
-
-    # Require Authorization header
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return _unauthorized("Missing or malformed Authorization header")
-
     token = auth_header.split(" ", 1)[1]
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -107,7 +119,6 @@ async def enforce_jwt_auth(request: Request, call_next):
         request.state.role     = payload.get("role", "officer")
     except JWTError as exc:
         return _unauthorized(f"Invalid token: {exc}")
-
     return await call_next(request)
 
 
@@ -156,29 +167,24 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
-# ── Health endpoints ──────────────────────────────────────────────────────────
+# ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/")
 def root():
     return {"message": "Sentinel Full Backend is online", "port": 8000}
-
 
 @app.get("/api/status")
 def status_check():
     return {"status": "OK"}
 
 
-@app.on_event("startup")
-def startup_event():
-    print("[STARTUP] Sentinel backend is online")
-
-
+# ── Manual trigger endpoints ──────────────────────────────────────────────────
 @app.get("/api/news/feed")
 def get_news_feed():
     data = fetch_crime_news()
     return {"results": data}
 
-
 @app.get("/api/debug/fetch")
 def trigger_fetch():
-    data = fetch_crime_news()
-    return {"cache_size": len(data), "first": data[0] if data else None}
+    """Manually trigger a news ingest right now and return how many rows were written."""
+    n = ingest_crime_news()
+    return {"inserted": n, "message": f"{n} real news articles written to DB"}
