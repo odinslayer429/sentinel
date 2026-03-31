@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import ForceAllocator from '../components/ForceAllocator';
+import DispatchBoard from '../components/DispatchBoard';
 import 'leaflet/dist/leaflet.css';
 import './MarvelDashboard.css';
 import MahaCrimeCopilot from '../components/MahaCrimeCopilot';
@@ -28,7 +29,7 @@ interface Offender { id?: string; name: string; alias: string; fir_count: number
 interface Stats { total_24h: number; critical: number; warning: number; }
 interface SurgeAlert { zone: string; ratio: number; severity: 'SURGE' | 'ELEVATED'; message: string; }
 
-// ─── Plain-language translators ───────────────────────────────────────
+// ─── Plain-language translators ───────────────────────────────────────────
 
 const riskToAction = (r: string): string => {
   const v = (r || '').toUpperCase();
@@ -115,7 +116,7 @@ const ErrorState = ({ msg, onRetry }: { msg: string; onRetry: () => void }) => (
   </div>
 );
 
-// ─── Shared: Intel Brick ──────────────────────────────────────────────
+// ─── Shared: Intel Brick ──────────────────────────────────────────────────
 function IntelBrick({
   zone, zoneName, headline, detail, action, crimeType, extra, color, index
 }: {
@@ -155,7 +156,7 @@ function IntelBrick({
   );
 }
 
-// ─── WeeklyScheduler ─────────────────────────────────────────────────
+// ─── WeeklyScheduler ─────────────────────────────────────────────────────
 function WeeklyScheduler({ velocity }: { velocity: ZoneVelocity[] }) {
   const [schedule, setSchedule] = useState<any[]>([]);
   const generate = () => {
@@ -276,7 +277,7 @@ function AIIntakeSection() {
   );
 }
 
-// ─── Neural Node Panel ────────────────────────────────────────────────
+// ─── Neural Node Panel ──────────────────────────────────────────────────
 function NeuralNodePanel() {
   const [hotspots,  setHotspots]  = useState<any[]>([]);
   const [anomalies, setAnomalies] = useState<any[]>([]);
@@ -374,7 +375,7 @@ function NeuralNodePanel() {
   );
 }
 
-// ─── Anomaly Index Panel ──────────────────────────────────────────────
+// ─── Anomaly Index Panel ──────────────────────────────────────────────────
 function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
   if (!velocity.length) return <EmptyState icon="⚡" msg="NO VELOCITY DATA" />;
 
@@ -454,12 +455,11 @@ function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
   );
 }
 
-// ─── Intel Stream Panel — wired to live /api/events backend ──────────
+// ─── Intel Stream Panel ────────────────────────────────────────────────────
 function IntelStreamPanel({ events }: { events: Event[] }) {
   const [filter, setFilter] = useState('ALL');
   const feedRef = useRef<HTMLDivElement>(null);
 
-  // deriveSeverity now uses ev.crime_types (correct backend field)
   const enriched = events.map(ev => ({ ...ev, severity: deriveSeverity(ev) }));
   const filtered  = filter === 'ALL' ? enriched : enriched.filter(e => e.severity === filter);
   const sevCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
@@ -468,8 +468,6 @@ function IntelStreamPanel({ events }: { events: Event[] }) {
   return (
     <section>
       <div className="section-label">LIVE INCIDENT FEED</div>
-
-      {/* Severity summary tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.04)', marginBottom: '1.5rem' }}>
         {(['CRITICAL','HIGH','MEDIUM','LOW'] as const).map(s => (
           <div key={s} className="tactical-card" onClick={() => setFilter(filter === s ? 'ALL' : s)}
@@ -480,8 +478,6 @@ function IntelStreamPanel({ events }: { events: Event[] }) {
           </div>
         ))}
       </div>
-
-      {/* Filter bar + live indicator */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
         {['ALL','CRITICAL','HIGH','MEDIUM','LOW'].map(s => (
           <button key={s} onClick={() => setFilter(s)} style={{
@@ -497,7 +493,6 @@ function IntelStreamPanel({ events }: { events: Event[] }) {
           <span style={{ fontSize: '0.5rem', color: '#34C759', letterSpacing: 2 }}>LIVE · {enriched.length} INCIDENTS</span>
         </div>
       </div>
-
       {filtered.length === 0 && <EmptyState icon="📡" msg="NO INCIDENTS MATCH FILTER" />}
       {filtered.length > 0 && (
         <div ref={feedRef} style={{ height: '65vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -507,31 +502,23 @@ function IntelStreamPanel({ events }: { events: Event[] }) {
               style={{ padding: '1rem 1.5rem', background: 'rgba(255,255,255,0.02)', borderLeft: `3px solid ${sevColor(ev.severity)}`, display: 'flex', alignItems: 'flex-start', gap: '1.5rem' }}
               whileHover={{ background: 'rgba(255,255,255,0.04)' }}
             >
-              {/* Severity + time — uses published_at (correct backend field) */}
               <div style={{ minWidth: 90, flexShrink: 0 }}>
                 <div style={{ fontSize: '0.6rem', color: sevColor(ev.severity), fontWeight: 900, letterSpacing: 1, marginBottom: 4 }}>
                   {ev.severity === 'CRITICAL' ? '🔴 CRITICAL' : ev.severity === 'HIGH' ? '🟠 HIGH' : ev.severity === 'MEDIUM' ? '🟡 MEDIUM' : '🔵 LOW'}
                 </div>
                 <div style={{ fontSize: '0.5rem', color: '#444' }}>
-                  {ev.published_at
-                    ? new Date(ev.published_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    : '--:--'}
+                  {ev.published_at ? new Date(ev.published_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
                 </div>
-                {/* Date on second line if timestamp is old */}
                 {ev.published_at && (
                   <div style={{ fontSize: '0.45rem', color: '#333', marginTop: 1 }}>
                     {new Date(ev.published_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                   </div>
                 )}
               </div>
-
-              {/* Title + description */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 900, fontSize: '0.75rem', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.title}</div>
                 <div style={{ fontSize: '0.6rem', color: '#666', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.description}</div>
               </div>
-
-              {/* Zone + crime type + source + link */}
               <div style={{ minWidth: 90, textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontSize: '0.6rem', color: '#888', letterSpacing: 1, fontWeight: 700 }}>{ev.zone || ev.zone_id || '—'}</div>
                 {ev.crime_types && (
@@ -557,7 +544,7 @@ function IntelStreamPanel({ events }: { events: Event[] }) {
   );
 }
 
-// ─── OSINT Scanner Panel ──────────────────────────────────────────────
+// ─── OSINT Scanner Panel ──────────────────────────────────────────────────
 function OSINTPanel() {
   const [target, setTarget] = useState('');
   const [scanType, setScanType] = useState<'URL' | 'PHONE' | 'NAME'>('URL');
@@ -658,7 +645,7 @@ function OSINTPanel() {
   );
 }
 
-// ─── Main Dashboard ───────────────────────────────────────────────────
+// ─── Main Dashboard ────────────────────────────────────────────────────
 export default function MarvelDashboard() {
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [stats,    setStats]    = useState<Stats | null>(null);
@@ -691,7 +678,6 @@ export default function MarvelDashboard() {
         axios.get('/api/stats'),
         axios.get('/api/velocity'),
         axios.get('/api/alerts'),
-        // Fetch up to 200 live events sorted newest-first
         axios.get('/api/events/recent?limit=200'),
         axios.get('/api/investigation/offenders'),
       ]);
@@ -734,6 +720,7 @@ export default function MarvelDashboard() {
     { id: '06', title: 'OFFENDER PROFILES', icon: '👤', desc: 'Known offenders & re-offending risk' },
     { id: '07', title: 'OSINT SCANNER',     icon: '🔍', desc: 'Check suspicious links & numbers' },
     { id: '08', title: 'AI FIR INTAKE',     icon: '🤖', desc: 'Auto-read and extract FIR details' },
+    { id: '09', title: 'DISPATCH BOARD',    icon: '📭', desc: 'Assign & track officer dispatch tasks' },
   ];
 
   return (
@@ -973,6 +960,13 @@ export default function MarvelDashboard() {
 
             {activeModule === '08' && (
               <section><div className="section-label">AI FIR READER // AUTO-EXTRACT DETAILS</div><AIIntakeSection /></section>
+            )}
+
+            {activeModule === '09' && (
+              <section>
+                <div className="section-label">DISPATCH COMMAND BOARD // OFFICER TASK TRACKING</div>
+                <DispatchBoard />
+              </section>
             )}
 
           </motion.div>
