@@ -1,122 +1,133 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from datetime import datetime
-import pandas as pd
-import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
+"""
+Prediction Router
 
-from db.database import get_db
-from db.models import CrimeEvent
-from services.zone_graph import zone_ids
+GET  /api/predict              — predict hotspot risk for all zones (Neural Node panel)
+GET  /api/predict/crime-type   — predict top-3 crime types for a specific zone+time
+POST /api/predict              — legacy body-based hotspot prediction (kept for compatibility)
+
+All inference uses the pre-trained crime_model.pkl + label_encoder.pkl.
+NEVER retrains at request time.
+"""
+from fastapi import APIRouter, Query, HTTPException
+from pydantic import BaseModel
+from datetime import datetime
+from ml.predict import predict_crime, get_model_info
 
 router = APIRouter(prefix="/api/predict", tags=["Prediction"])
 
-class PredictRequest(BaseModel):
-    month: int
-    day: str  # Monday, Tuesday, etc.
-    time_period: str  # Morning, Afternoon, Evening, Night
+ZONE_NAMES = {
+    "Z01": "Fort / Colaba",  "Z02": "Byculla / Dongri", "Z03": "Dadar / Worli",
+    "Z04": "Bandra / Khar",  "Z05": "Andheri",           "Z06": "Borivali / Kandivali",
+    "Z07": "Kurla / Ghatkopar", "Z08": "Mulund / Bhandup", "Z09": "Thane",
+    "Z10": "Powai / Vikhroli",  "Z11": "Navi Mumbai",       "Z12": "Mira Road / Vasai",
+}
+URBAN_ZONES = {"Z01", "Z02", "Z03", "Z04", "Z07"}
 
-@router.post("")
-def predict_crime(req: PredictRequest, db: Session = Depends(get_db)):
-    # 1. Load Data
-    events = db.query(CrimeEvent).all()
-    if not events:
-        raise HTTPException(status_code=404, detail="No historical data found for training.")
 
-    df = pd.DataFrame([{
-        "zone_id": e.zone_id,
-        "timestamp": e.published_at or e.ingested_at
-    } for e in events])
-    
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df['month'] = df['timestamp'].dt.month
-    df['weekday_num'] = df['timestamp'].dt.weekday
-    
-    def get_timeband(hour):
-        if 6 <= hour < 12: return 0 # Morning
-        if 12 <= hour < 18: return 1 # Afternoon
-        if 18 <= hour < 24: return 2 # Evening
-        return 3 # Night
-    
-    df['timeband_encoded'] = df['timestamp'].dt.hour.apply(get_timeband)
+@router.get("/model-info")
+def model_info():
+    """Return accuracy and feature metadata of the loaded model."""
+    try:
+        return get_model_info()
+    except FileNotFoundError:
+        raise HTTPException(503, detail="Model not trained yet. Run ml/train_from_db.py first.")
 
-    # 2. Target: is_hotspot (75th percentile)
-    counts = df.groupby(['zone_id', 'month', 'weekday_num', 'timeband_encoded']).size().reset_index(name='crime_count')
-    threshold = counts['crime_count'].quantile(0.75)
-    counts['is_hotspot'] = (counts['crime_count'] > threshold).astype(int)
 
-    # 3. Train Model
-    le = LabelEncoder()
-    counts['district_encoded'] = le.fit_transform(counts['zone_id'])
-    
-    features = ['district_encoded', 'month', 'weekday_num', 'timeband_encoded']
-    X = counts[features]
-    y = counts['is_hotspot']
-    
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X, y)
+@router.get("/crime-type")
+def crime_type_prediction(
+    zone_id:     str = Query("Z07", description="Zone code e.g. Z07"),
+    hour:        int = Query(...,    ge=0, le=23),
+    day_of_week: int = Query(...,    ge=0, le=6,  description="0=Mon, 6=Sun"),
+    month:       int = Query(...,    ge=1, le=12),
+):
+    """
+    Returns top-3 predicted crime types with probabilities.
+    This is the primary Neural Node endpoint.
+    """
+    try:
+        return predict_crime(zone_id=zone_id, hour=hour, day_of_week=day_of_week, month=month)
+    except FileNotFoundError:
+        raise HTTPException(503, detail="Model not trained yet. Run ml/train_from_db.py first.")
+    except Exception as exc:
+        raise HTTPException(500, detail=str(exc))
 
-    # 4. Input Encoding
-    day_map = {
-        "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
-        "Friday": 4, "Saturday": 5, "Sunday": 6
-    }
-    time_map = {"Morning": 0, "Afternoon": 1, "Evening": 2, "Night": 3}
-    
-    weekday_val = day_map.get(req.day, 0)
-    time_val = time_map.get(req.time_period, 0)
 
-    # 5. Predict per Zone
+@router.get("")
+def hotspot_prediction(
+    month:       int = Query(default_factory=lambda: datetime.utcnow().month, ge=1, le=12),
+    day_of_week: int = Query(default_factory=lambda: datetime.utcnow().weekday(), ge=0, le=6),
+    hour:        int = Query(default_factory=lambda: datetime.utcnow().hour, ge=0, le=23),
+):
+    """
+    Predict hotspot risk for ALL zones for a given time context.
+    Defaults to current time if not supplied — perfect for the dashboard.
+    """
+    now = datetime.utcnow()
+    month       = month       or now.month
+    day_of_week = day_of_week if day_of_week is not None else now.weekday()
+    hour        = hour        if hour        is not None else now.hour
+
+    MONTH_FACTOR = {10: 1.3, 11: 1.4, 3: 1.2}
+    month_factor = MONTH_FACTOR.get(month, 1.0)
+    if month in {6, 7, 8, 9}:
+        month_factor *= 1.1
+    day_factor = 1.15 if day_of_week >= 5 else 1.0
+
     results = []
-    all_zids = zone_ids()
-    urban_zones = ["Z01", "Z02", "Z03", "Z04", "Z07", "Z08", "Z09", "Z10"]
-    
-    # Pre-calculate multipliers
-    month_factor = 1.0
-    if req.month == 10: month_factor = 1.3
-    elif req.month == 11: month_factor = 1.4
-    elif req.month == 3: month_factor = 1.2
-    
-    if req.month in [6, 7, 8, 9]:
-        month_factor *= 1.1 # Monsoon
-        
-    day_factor = 1.15 if weekday_val >= 5 else 1.0 # Weekend
-
-    for zid in all_zids:
+    for zone_id, zone_name in ZONE_NAMES.items():
         try:
-            d_enc = le.transform([zid])[0]
-        except:
-            d_enc = 0 # Fallback
-            
-        pred_input = [[d_enc, req.month, weekday_val, time_val]]
-        base_risk = float(model.predict_proba(pred_input)[0][1])
-        
-        # Apply multipliers
-        urban_mult = 1.2 if zid in urban_zones else 1.0
-        enhanced_risk = base_risk * month_factor * day_factor * urban_mult
-        
-        # Risk classification
+            pred = predict_crime(zone_id=zone_id, hour=hour, day_of_week=day_of_week, month=month)
+        except FileNotFoundError:
+            raise HTTPException(503, detail="Model not trained yet. Run ml/train_from_db.py first.")
+        except Exception:
+            continue
+
+        top = pred["predictions"][0]
+        base_risk  = top["probability"]
+        urban_mult = 1.2 if zone_id in URBAN_ZONES else 1.0
+        enhanced   = min(base_risk * month_factor * day_factor * urban_mult, 1.0)
+
         risk_level = "LOW"
-        if enhanced_risk > 0.7: risk_level = "CRITICAL"
-        elif enhanced_risk > 0.4: risk_level = "ELEVATED"
-        
-        # Strategic actions
-        action = "Increase patrol frequency" if risk_level != "LOW" else "Routine monitoring"
-        if zid in urban_zones and risk_level == "CRITICAL":
-            action = "Deploy rapid response unit + Fixed point pickets"
-            
+        if enhanced > 0.55: risk_level = "CRITICAL"
+        elif enhanced > 0.35: risk_level = "ELEVATED"
+        elif enhanced > 0.20: risk_level = "MODERATE"
+
+        actions = {
+            "CRITICAL": "Deploy rapid response unit + Fixed point pickets",
+            "ELEVATED": "Increase patrol frequency",
+            "MODERATE": "Monitor closely",
+            "LOW":      "Routine patrol",
+        }
+
         results.append({
-            "zone": zid,
-            "base_risk": round(base_risk, 3),
-            "enhanced_risk": round(enhanced_risk, 3),
-            "confidence_band": "HIGH" if base_risk > 0.6 or base_risk < 0.2 else "MEDIUM",
-            "risk_level": risk_level,
-            "strategic_action": action,
-            "month_factor": month_factor,
-            "time_factor": 1.0 # Static for now as requested
+            "zone":            zone_id,
+            "zone_name":       zone_name,
+            "top_crime_type":  top["crime_type"],
+            "top_probability": round(base_risk, 3),
+            "enhanced_risk":   round(enhanced, 3),
+            "risk_level":      risk_level,
+            "strategic_action":actions[risk_level],
+            "all_predictions": pred["predictions"],
+            "timeband":        pred["timeband"],
+            "model_accuracy":  pred["model_accuracy"],
         })
 
+    results.sort(key=lambda x: -x["enhanced_risk"])
     return results
 
+
+# ── Legacy POST (kept so nothing breaks) ───────────────────────────────────
+class PredictRequest(BaseModel):
+    month:       int
+    day:         str   # "Monday" … "Sunday"
+    time_period: str   # "Morning" | "Afternoon" | "Evening" | "Night"
+
+@router.post("/legacy")
+def predict_legacy(req: PredictRequest):
+    DAY_MAP  = {"Monday":0,"Tuesday":1,"Wednesday":2,"Thursday":3,"Friday":4,"Saturday":5,"Sunday":6}
+    TIME_MAP = {"Morning":7,"Afternoon":14,"Evening":20,"Night":1}
+    return hotspot_prediction(
+        month=req.month,
+        day_of_week=DAY_MAP.get(req.day, 0),
+        hour=TIME_MAP.get(req.time_period, 12),
+    )
