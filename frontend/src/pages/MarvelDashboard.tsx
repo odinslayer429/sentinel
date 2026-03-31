@@ -16,7 +16,6 @@ interface ZoneVelocity { zone_id: string; zone_name: string; z_score: number; cu
 interface Alert { zone: string; message: string; severity: string; }
 interface Event { id?: string; title: string; description: string; zone: string; crime_type: string; created_at?: string; ingested_at?: string; timestamp?: string; url?: string; severity?: string; }
 interface Offender { id?: string; name: string; alias: string; fir_count: number; last_seen: string; zones: string | string[]; predicted_risk?: 'High' | 'Medium' | 'Low'; intervention_protocol?: string; recidivism_probability?: number; }
-interface MLPrediction { crime_type: string; probability: number; zone: string; }
 interface Stats { total_24h: number; critical: number; warning: number; }
 interface SurgeAlert { zone: string; ratio: number; severity: 'SURGE' | 'ELEVATED'; message: string; }
 
@@ -26,6 +25,16 @@ const riskColor = (r?: string) => r === 'High' ? '#FF3B30' : r === 'Medium' ? '#
 const riskBg    = (r?: string) => r === 'High' ? 'rgba(255,59,48,0.1)' : r === 'Medium' ? 'rgba(255,149,0,0.1)' : 'rgba(52,199,89,0.1)';
 const sevColor  = (s?: string) => { const v = (s || '').toUpperCase(); return v === 'CRITICAL' ? '#FF2D55' : v === 'HIGH' ? '#FF3B30' : v === 'MEDIUM' ? '#FF9500' : '#5AC8FA'; };
 
+// Derive severity from crime_type when the events table doesn't store it
+const deriveSeverity = (ev: Event): string => {
+  if (ev.severity) return ev.severity.toUpperCase();
+  const ct = (ev.crime_type || '').toUpperCase();
+  if (ct.includes('MURDER') || ct.includes('RAPE') || ct.includes('KIDNAP') || ct.includes('DACOITY')) return 'CRITICAL';
+  if (ct.includes('ROBBERY') || ct.includes('ASSAULT') || ct.includes('RIOT') || ct.includes('ARSON'))  return 'HIGH';
+  if (ct.includes('THEFT') || ct.includes('BURGLARY') || ct.includes('FRAUD') || ct.includes('CYBER'))  return 'MEDIUM';
+  return 'LOW';
+};
+
 const ZONE_CENTERS: Record<string, [number, number]> = {
   "Z01": [18.9067, 72.8147], "Z02": [18.9438, 72.8249], "Z03": [19.0396, 72.8528],
   "Z04": [19.0596, 72.8295], "Z05": [19.1197, 72.8468], "Z06": [19.2294, 72.8567],
@@ -33,38 +42,32 @@ const ZONE_CENTERS: Record<string, [number, number]> = {
   "Z10": [19.1197, 72.9070], "Z11": [19.0330, 73.0297], "Z12": [19.2183, 72.9781]
 };
 
-// ─── Framer Motion variants ───────────────────────────────────────────
 const hubContainer = {
   hidden: {},
   show: { transition: { staggerChildren: 0.07 } }
 };
-
 const hubTile = {
   hidden: { opacity: 0, y: 28, scale: 0.97 },
   show:   { opacity: 1, y: 0,  scale: 1, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } }
 };
-
 const pageVariants = {
   initial: { opacity: 0, y: 18 },
   animate: { opacity: 1, y: 0,  transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } },
   exit:    { opacity: 0, y: -10, transition: { duration: 0.2 } }
 };
 
-// ─── Shared UI primitives ─────────────────────────────────────────────
 const Spinner = () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem', flexDirection: 'column', gap: '1rem' }}>
     <div style={{ width: 36, height: 36, border: '2px solid #1a1a1a', borderTop: '2px solid #D2FF00', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
     <div style={{ fontSize: '0.55rem', color: '#555', letterSpacing: 4 }}>LOADING...</div>
   </div>
 );
-
 const EmptyState = ({ icon, msg }: { icon: string; msg: string }) => (
   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem', gap: '1rem', color: '#333' }}>
     <div style={{ fontSize: '2.5rem', opacity: 0.4 }}>{icon}</div>
     <div style={{ fontSize: '0.55rem', letterSpacing: 3, color: '#444' }}>{msg}</div>
   </div>
 );
-
 const ErrorState = ({ msg, onRetry }: { msg: string; onRetry: () => void }) => (
   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '3rem', gap: '1rem' }}>
     <div style={{ color: '#FF3B30', fontSize: '0.65rem', letterSpacing: 2 }}>⚠ {msg}</div>
@@ -189,121 +192,188 @@ function AIIntakeSection() {
   );
 }
 
-// ─── Neural Node Panel ────────────────────────────────────────────────
+// ─── Neural Node Panel — wired to real /api/ml/* endpoints ────────────
 function NeuralNodePanel() {
-  const [data, setData] = useState<MLPrediction[]>([]);
-  const [zoneBreakdown, setZoneBreakdown] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [hotspots,  setHotspots]  = useState<any[]>([]);
+  const [anomalies, setAnomalies] = useState<any[]>([]);
+  const [forecast,  setForecast]  = useState<any[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const [pred, zones] = await Promise.allSettled([
-        axios.get('/api/predict/top'),
-        axios.get('/api/stats/zone-breakdown'),
+      const [hs, an, fc] = await Promise.allSettled([
+        axios.get('/api/ml/hotspot-zones?top_n=8&hours_ahead=3'),
+        axios.get('/api/ml/anomalies?days=30'),
+        axios.get('/api/ml/hawkes-forecast?top_n=6'),
       ]);
-      if (pred.status === 'fulfilled') {
-        const raw = pred.value.data;
-        setData(Array.isArray(raw) ? raw : raw.predictions || []);
-      }
-      if (zones.status === 'fulfilled') {
-        const raw = zones.value.data;
-        setZoneBreakdown(Array.isArray(raw) ? raw.slice(0, 8) : raw.zones?.slice(0, 8) || []);
-      }
+      if (hs.status === 'fulfilled') setHotspots(Array.isArray(hs.value.data) ? hs.value.data : []);
+      if (an.status === 'fulfilled') setAnomalies(Array.isArray(an.value.data) ? an.value.data : []);
+      if (fc.status === 'fulfilled') setForecast(Array.isArray(fc.value.data) ? fc.value.data : []);
     } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Failed to load ML predictions.');
+      setError(e?.response?.data?.detail || 'Failed to load ML data.');
     } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   if (loading) return <Spinner />;
-  if (error) return <ErrorState msg={error} onRetry={fetchData} />;
-  if (!data.length && !zoneBreakdown.length) return <EmptyState icon="🧠" msg="NO PREDICTION DATA AVAILABLE" />;
+  if (error)   return <ErrorState msg={error} onRetry={fetchData} />;
+  if (!hotspots.length && !anomalies.length) return <EmptyState icon="🧠" msg="NO ML DATA — RUN seed_real_data.py TO POPULATE" />;
 
-  const chartData = data.slice(0, 8).map(p => ({
-    name: p.crime_type?.replace(/_/g, ' ').substring(0, 12) || 'UNKNOWN',
-    probability: Math.round((p.probability || 0) * 100),
-    zone: p.zone,
+  const riskLvlColor = (r: string) => r === 'CRITICAL' ? '#FF3B30' : r === 'HIGH' ? '#FF9500' : r === 'ELEVATED' ? '#FF9500' : '#34C759';
+
+  // Bar chart: hotspot zones by predicted intensity
+  const hsChart = hotspots.map(h => ({
+    name: h.zone_id,
+    intensity: Math.round(h.predicted_intensity * 100) / 100,
+    crimes: h.crimes_last_24h,
   }));
 
-  const zoneData = zoneBreakdown.map((z: any) => ({
-    name: (z.zone_id || z.zone || '').substring(0, 4),
-    crimes: z.count || z.total || 0,
-    critical: z.critical || 0,
+  // Bar chart: anomalies by z-score
+  const anChart = anomalies.slice(0, 8).map(a => ({
+    name: a.zone_id,
+    z_score: Math.round(a.z_score * 100) / 100,
   }));
 
   return (
     <section>
-      <div className="section-label">NEURAL_NODE // ML_PREDICTIONS</div>
+      <div className="section-label">NEURAL_NODE // HAWKES_ML + ANOMALY_DETECTION</div>
+
+      {/* Summary stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.04)', marginBottom: '1px' }}>
+        {[
+          { label: 'PREDICTED HOTSPOTS', val: hotspots.length,  color: '#FF3B30' },
+          { label: 'ACTIVE ANOMALIES',   val: anomalies.length, color: '#FF9500' },
+          { label: 'FORECAST ZONES',     val: forecast.length,  color: '#D2FF00' },
+        ].map((s, i) => (
+          <div key={i} className="tactical-card" style={{ textAlign: 'center', padding: '1.5rem' }}>
+            <div className="card-label">{s.label}</div>
+            <div style={{ fontSize: '2.5rem', fontWeight: 900, color: s.color, textShadow: `0 0 16px ${s.color}` }}>{s.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Charts row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px', background: 'rgba(255,255,255,0.04)', marginBottom: '1px' }}>
         <div className="tactical-card">
-          <div className="card-label" style={{ marginBottom: '1rem' }}>CRIME_TYPE_PROBABILITY</div>
-          {chartData.length > 0 ? (
+          <div className="card-label" style={{ marginBottom: '1rem' }}>HAWKES PREDICTED INTENSITY (NEXT 3H)</div>
+          {hsChart.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData} layout="vertical">
-                <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fill: '#444', fontSize: 10 }} />
-                <YAxis type="category" dataKey="name" tick={{ fill: '#666', fontSize: 10 }} width={90} />
-                <Tooltip formatter={(v: any) => [`${v}%`, 'Probability']} contentStyle={{ background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', fontFamily: 'Space Mono, monospace', fontSize: '0.6rem' }} />
-                <Bar dataKey="probability" fill="#D2FF00" radius={[0, 2, 2, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : <EmptyState icon="📊" msg="NO PREDICTION DATA" />}
-        </div>
-        <div className="tactical-card">
-          <div className="card-label" style={{ marginBottom: '1rem' }}>ZONE_CRIME_LOAD</div>
-          {zoneData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={zoneData}>
+              <BarChart data={hsChart}>
                 <XAxis dataKey="name" tick={{ fill: '#444', fontSize: 10 }} />
                 <YAxis tick={{ fill: '#444', fontSize: 10 }} />
                 <Tooltip contentStyle={{ background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', fontFamily: 'Space Mono, monospace', fontSize: '0.6rem' }} />
-                <Bar dataKey="crimes" fill="#00FFFF" name="Total" />
-                <Bar dataKey="critical" fill="#FF3B30" name="Critical" />
+                <Bar dataKey="intensity" fill="#D2FF00" name="Intensity" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="crimes" fill="rgba(255,59,48,0.5)" name="24h Crimes" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          ) : <EmptyState icon="🗺️" msg="NO ZONE DATA" />}
+          ) : <EmptyState icon="📊" msg="NO HOTSPOT DATA" />}
+        </div>
+        <div className="tactical-card">
+          <div className="card-label" style={{ marginBottom: '1rem' }}>ANOMALY Z-SCORES (30-DAY BASELINE)</div>
+          {anChart.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={anChart} layout="vertical">
+                <XAxis type="number" tick={{ fill: '#444', fontSize: 10 }} />
+                <YAxis type="category" dataKey="name" tick={{ fill: '#666', fontSize: 10 }} width={40} />
+                <Tooltip formatter={(v: any) => [`σ ${v}`, 'Z-Score']} contentStyle={{ background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', fontFamily: 'Space Mono, monospace', fontSize: '0.6rem' }} />
+                <Bar dataKey="z_score" fill="#FF9500" radius={[0, 2, 2, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <EmptyState icon="📈" msg="NO ANOMALIES DETECTED" />}
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1px', background: 'rgba(255,255,255,0.04)', marginTop: '1px' }}>
-        {data.slice(0, 6).map((p, i) => (
-          <motion.div key={i} className="tactical-card" style={{ padding: '1.5rem' }}
+
+      {/* Hotspot cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1px', background: 'rgba(255,255,255,0.04)', marginTop: '1px' }}>
+        {hotspots.map((h, i) => (
+          <motion.div key={i} className="tactical-card" style={{ padding: '1.5rem', borderTop: `2px solid ${riskLvlColor(h.risk_level)}` }}
             initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
-            <div className="card-label">{p.zone || 'ZONE_N/A'}</div>
-            <div style={{ fontWeight: 900, fontSize: '0.8rem', marginTop: '4px', color: '#D2FF00', letterSpacing: 1 }}>{p.crime_type?.replace(/_/g, ' ')}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div className="card-label">ZONE</div>
+                <div style={{ fontWeight: 900, fontSize: '1.2rem', color: riskLvlColor(h.risk_level) }}>{h.zone_id}</div>
+              </div>
+              <span style={{ padding: '3px 8px', fontSize: '0.5rem', fontWeight: 900, letterSpacing: 2, background: riskLvlColor(h.risk_level) + '22', color: riskLvlColor(h.risk_level), border: `1px solid ${riskLvlColor(h.risk_level)}55` }}>
+                {h.risk_level}
+              </span>
+            </div>
+            <div style={{ marginTop: '0.75rem' }}>
+              <div className="card-label" style={{ marginBottom: 3 }}>TOP CRIME TYPE</div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#ccc' }}>{h.top_crime_type?.replace(/_/g, ' ') || '—'}</div>
+            </div>
             <div style={{ marginTop: '0.75rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span className="card-label">CONFIDENCE</span>
-                <span style={{ fontSize: '0.6rem', fontWeight: 900, color: '#D2FF00' }}>{Math.round((p.probability || 0) * 100)}%</span>
+                <span className="card-label">INTENSITY</span>
+                <span style={{ fontSize: '0.6rem', fontWeight: 900, color: '#D2FF00' }}>{h.predicted_intensity?.toFixed(2)}</span>
               </div>
               <div style={{ height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 2 }}>
-                <motion.div initial={{ width: 0 }} animate={{ width: Math.round((p.probability || 0) * 100) + '%' }} transition={{ duration: 0.8, delay: i * 0.06, ease: 'easeOut' }}
-                  style={{ height: '100%', background: '#D2FF00', borderRadius: 2 }} />
+                <motion.div initial={{ width: 0 }} animate={{ width: Math.min(h.predicted_intensity * 40, 100) + '%' }} transition={{ duration: 0.8, delay: i * 0.06 }}
+                  style={{ height: '100%', background: riskLvlColor(h.risk_level), borderRadius: 2 }} />
               </div>
             </div>
+            <div style={{ marginTop: '0.5rem', fontSize: '0.5rem', color: '#444' }}>CRIMES 24H: {h.crimes_last_24h}</div>
           </motion.div>
         ))}
       </div>
+
+      {/* Anomaly detail cards */}
+      {anomalies.length > 0 && (
+        <>
+          <div className="section-label" style={{ marginTop: '2rem' }}>ACTIVE_ANOMALIES // Z-SCORE ≥ 2σ</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1px', background: 'rgba(255,255,255,0.04)', marginTop: '1px' }}>
+            {anomalies.map((a, i) => (
+              <motion.div key={i} className="tactical-card" style={{ padding: '1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i * 0.03, 0.5) }}>
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: '0.9rem', letterSpacing: 2 }}>{a.zone_id}</div>
+                  <div style={{ fontSize: '0.55rem', color: '#555', marginTop: 2 }}>DAILY AVG: {a.mean_daily?.toFixed(1)} | LATEST: {a.latest_count}</div>
+                  <span style={{ padding: '2px 6px', fontSize: '0.5rem', marginTop: 6, display: 'inline-block', background: zColor(a.z_score) + '22', color: zColor(a.z_score), border: `1px solid ${zColor(a.z_score)}55`, letterSpacing: 1 }}>{a.severity}</span>
+                </div>
+                <div style={{ fontSize: '2rem', fontWeight: 900, color: zColor(a.z_score), textShadow: `0 0 12px ${zColor(a.z_score)}` }}>σ{a.z_score?.toFixed(1)}</div>
+              </motion.div>
+            ))}
+          </div>
+        </>
+      )}
     </section>
   );
 }
 
-// ─── Intel Stream Panel ───────────────────────────────────────────────
+// ─── Intel Stream Panel — severity derived from crime_type ─────────────
 function IntelStreamPanel({ events }: { events: Event[] }) {
   const [filter, setFilter] = useState('ALL');
   const feedRef = useRef<HTMLDivElement>(null);
 
-  const filtered = filter === 'ALL' ? events : events.filter(e => (e.severity || '').toUpperCase() === filter);
+  // Enrich events with derived severity
+  const enriched = events.map(ev => ({ ...ev, severity: deriveSeverity(ev) }));
+  const filtered  = filter === 'ALL' ? enriched : enriched.filter(e => e.severity === filter);
+  const sevCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+  enriched.forEach(e => { const s = e.severity as keyof typeof sevCounts; if (s in sevCounts) sevCounts[s]++; });
+
   const sevs = ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 
   return (
     <section>
       <div className="section-label">INTEL_STREAM // LIVE_EVENT_FEED</div>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+
+      {/* Severity count bar */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.04)', marginBottom: '1rem' }}>
+        {(['CRITICAL','HIGH','MEDIUM','LOW'] as const).map(s => (
+          <div key={s} className="tactical-card" style={{ textAlign: 'center', padding: '0.75rem', cursor: 'pointer', borderTop: `2px solid ${sevColor(s)}`, opacity: filter === s || filter === 'ALL' ? 1 : 0.3 }}
+            onClick={() => setFilter(filter === s ? 'ALL' : s)}>
+            <div className="card-label">{s}</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 900, color: sevColor(s) }}>{sevCounts[s]}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
         {sevs.map(s => (
           <button key={s} onClick={() => setFilter(s)} style={{
-            padding: '0.5rem 1rem',
+            padding: '0.4rem 0.9rem',
             border: '1px solid ' + (filter === s ? sevColor(s) : 'rgba(255,255,255,0.08)'),
             background: filter === s ? sevColor(s) : 'transparent',
             color: filter === s ? '#000' : '#555',
@@ -312,29 +382,34 @@ function IntelStreamPanel({ events }: { events: Event[] }) {
         ))}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#34C759', boxShadow: '0 0 8px #34C759', animation: 'pulse 1.5s infinite' }} />
-          <span style={{ fontSize: '0.5rem', color: '#34C759', letterSpacing: 2 }}>LIVE</span>
+          <span style={{ fontSize: '0.5rem', color: '#34C759', letterSpacing: 2 }}>LIVE · {enriched.length} EVENTS</span>
         </div>
       </div>
+
       {filtered.length === 0 && <EmptyState icon="📡" msg="NO EVENTS MATCH FILTER" />}
       {filtered.length > 0 && (
         <div ref={feedRef} style={{ height: '65vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
           {filtered.map((ev, i) => (
             <motion.div key={ev.id || i}
-              initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(i * 0.02, 0.4) }}
+              initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(i * 0.015, 0.5) }}
               style={{ padding: '1rem 1.5rem', background: 'rgba(255,255,255,0.02)', borderLeft: '2px solid ' + sevColor(ev.severity), display: 'flex', alignItems: 'flex-start', gap: '1.5rem' }}
               whileHover={{ background: 'rgba(255,255,255,0.04)' }}
             >
-              <div style={{ minWidth: 70 }}>
-                <div style={{ fontSize: '0.5rem', color: sevColor(ev.severity), fontWeight: 900, letterSpacing: 2, marginBottom: 4 }}>{(ev.severity || 'LOW').toUpperCase()}</div>
-                <div style={{ fontSize: '0.5rem', color: '#444' }}>{ev.created_at ? new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}</div>
+              <div style={{ minWidth: 80 }}>
+                <div style={{ fontSize: '0.5rem', color: sevColor(ev.severity), fontWeight: 900, letterSpacing: 2, marginBottom: 4 }}>{ev.severity}</div>
+                <div style={{ fontSize: '0.5rem', color: '#444' }}>
+                  {ev.created_at ? new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :
+                   ev.ingested_at ? new Date(ev.ingested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                </div>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 900, fontSize: '0.75rem', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.title}</div>
                 <div style={{ fontSize: '0.6rem', color: '#555', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.description}</div>
               </div>
-              <div style={{ minWidth: 60, textAlign: 'right' }}>
+              <div style={{ minWidth: 70, textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontSize: '0.55rem', color: '#444', letterSpacing: 1 }}>{ev.zone || '—'}</div>
-                {ev.crime_type && <div style={{ fontSize: '0.5rem', color: '#D2FF00', letterSpacing: 1, marginTop: 2 }}>{ev.crime_type.substring(0, 12)}</div>}
+                {ev.crime_type && <div style={{ fontSize: '0.5rem', color: '#D2FF00', letterSpacing: 1, marginTop: 2 }}>{ev.crime_type.replace(/_/g, ' ').substring(0, 14)}</div>}
+                {ev.url && <a href={ev.url} target="_blank" rel="noreferrer" style={{ fontSize: '0.45rem', color: '#00FFFF', letterSpacing: 1, marginTop: 2, display: 'block' }}>SOURCE ↗</a>}
               </div>
             </motion.div>
           ))}
@@ -344,7 +419,7 @@ function IntelStreamPanel({ events }: { events: Event[] }) {
   );
 }
 
-// ─── OSINT Scanner Panel ──────────────────────────────────────────────
+// ─── OSINT Scanner Panel — wired to backend ───────────────────────────
 function OSINTPanel() {
   const [target, setTarget] = useState('');
   const [scanType, setScanType] = useState<'URL' | 'PHONE' | 'NAME'>('URL');
@@ -352,24 +427,34 @@ function OSINTPanel() {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const token   = sessionStorage.getItem('sentinel_token');
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
   const scan = async () => {
     if (!target.trim()) return;
     setLoading(true); setResult(null); setError(null);
     try {
-      await new Promise(r => setTimeout(r, 1200));
-      const isPhone = /^[+]?[0-9]{10,13}$/.test(target.replace(/\s/g, ''));
-      const isUrl   = /^https?:\/\//.test(target);
-      const score   = Math.floor(Math.random() * 60) + 20;
-      const flags: string[] = [];
-      if (isUrl) {
-        if (target.includes('bit.ly') || target.includes('tinyurl')) flags.push('URL_SHORTENER_DETECTED');
-        if (!target.startsWith('https')) flags.push('NO_SSL_CERTIFICATE');
+      // Try real backend endpoint first
+      const res = await axios.post('/api/investigation/osint-scan', { target, type: scanType }, { headers });
+      setResult(res.data);
+    } catch (backendErr: any) {
+      if (backendErr.response?.status === 404 || backendErr.response?.status === 405) {
+        // Fallback: client-side heuristic scan with clear "HEURISTIC" label
+        const isPhone = /^[+]?[0-9]{10,13}$/.test(target.replace(/\s/g, ''));
+        const flags: string[] = [];
+        let score = 50;
+        if (scanType === 'URL') {
+          if (target.includes('bit.ly') || target.includes('tinyurl')) { flags.push('URL_SHORTENER'); score += 20; }
+          if (!target.startsWith('https')) { flags.push('NO_SSL'); score += 15; }
+          if (target.includes('login') || target.includes('verify')) { flags.push('PHISHING_KEYWORD'); score += 20; }
+        }
+        if (isPhone && target.startsWith('+91')) flags.push('INDIA_REGISTERED');
+        score = Math.min(score, 95);
+        const verdict = score > 70 ? 'HIGH_RISK' : score > 50 ? 'SUSPICIOUS' : 'CLEAR';
+        setResult({ target, type: scanType, trust_score: score, verdict, flags, source: 'HEURISTIC', scanned_at: new Date().toISOString() });
+      } else {
+        setError(backendErr?.response?.data?.detail || 'Scan engine error.');
       }
-      if (isPhone && target.startsWith('+91')) flags.push('INDIA_REGISTERED');
-      const verdict = score > 70 ? 'HIGH_RISK' : score > 40 ? 'SUSPICIOUS' : 'CLEAR';
-      setResult({ target, type: scanType, trust_score: score, verdict, flags, scanned_at: new Date().toISOString() });
-    } catch {
-      setError('Scan engine error. Try again.');
     } finally { setLoading(false); }
   };
 
@@ -388,9 +473,7 @@ function OSINTPanel() {
           ))}
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <input
-            value={target} onChange={e => setTarget(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && scan()}
+          <input value={target} onChange={e => setTarget(e.target.value)} onKeyDown={e => e.key === 'Enter' && scan()}
             placeholder={scanType === 'URL' ? 'https://example.com' : scanType === 'PHONE' ? '+91 XXXXXXXXXX' : 'Suspect Name...'}
             style={{ flex: 1, padding: '1rem', fontSize: '0.7rem' }}
           />
@@ -407,12 +490,12 @@ function OSINTPanel() {
           className="tactical-card" style={{ marginTop: '1.5rem', borderColor: result.verdict === 'HIGH_RISK' ? 'rgba(255,59,48,0.3)' : result.verdict === 'SUSPICIOUS' ? 'rgba(255,149,0,0.3)' : 'rgba(52,199,89,0.3)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
             <div>
-              <div className="card-label">SCAN RESULT</div>
+              <div className="card-label">SCAN RESULT {result.source === 'HEURISTIC' && <span style={{ color: '#FF9500', marginLeft: 8 }}>⚠ HEURISTIC MODE</span>}</div>
               <div style={{ fontWeight: 900, fontSize: '1rem', color: result.verdict === 'HIGH_RISK' ? '#FF3B30' : result.verdict === 'SUSPICIOUS' ? '#FF9500' : '#34C759', letterSpacing: 3 }}>{result.verdict}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div className="card-label">TRUST SCORE</div>
-              <div style={{ fontSize: '2.5rem', fontWeight: 900, color: result.trust_score < 40 ? '#34C759' : result.trust_score < 70 ? '#FF9500' : '#FF3B30' }}>{result.trust_score}</div>
+              <div className="card-label">RISK SCORE</div>
+              <div style={{ fontSize: '2.5rem', fontWeight: 900, color: result.trust_score > 70 ? '#FF3B30' : result.trust_score > 50 ? '#FF9500' : '#34C759' }}>{result.trust_score}</div>
             </div>
           </div>
           <div style={{ fontSize: '0.65rem', color: '#555', wordBreak: 'break-all', marginBottom: '1rem' }}>{result.target}</div>
@@ -438,7 +521,7 @@ function OSINTPanel() {
 function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error,   setError]   = useState<string | null>(null);
 
   const fetchHistory = useCallback(async () => {
     setLoading(true); setError(null);
@@ -449,9 +532,7 @@ function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
     } catch {
       const synth = Array.from({ length: 24 }, (_, i) => {
         const entry: any = { time: `${String(i).padStart(2, '0')}:00` };
-        velocity.slice(0, 4).forEach(z => {
-          entry[z.zone_id] = Math.max(0, z.z_score + (Math.random() - 0.5) * 1.5);
-        });
+        velocity.slice(0, 4).forEach(z => { entry[z.zone_id] = Math.max(0, z.z_score + (Math.random() - 0.5) * 1.5); });
         return entry;
       });
       setHistory(synth);
@@ -460,7 +541,7 @@ function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
 
   useEffect(() => { if (velocity.length) fetchHistory(); }, [velocity, fetchHistory]);
 
-  const topZones = [...velocity].sort((a, b) => b.z_score - a.z_score).slice(0, 4);
+  const topZones  = [...velocity].sort((a, b) => b.z_score - a.z_score).slice(0, 4);
   const lineColors = ['#D2FF00', '#FF3B30', '#00FFFF', '#FF9500'];
 
   if (loading) return <Spinner />;
@@ -521,18 +602,18 @@ function AnomalyIndexPanel({ velocity }: { velocity: ZoneVelocity[] }) {
 // ─── Main Dashboard ───────────────────────────────────────────────────
 export default function MarvelDashboard() {
   const [activeModule, setActiveModule] = useState<string | null>(null);
-  const [stats, setStats]           = useState<Stats | null>(null);
-  const [velocity, setVelocity]     = useState<ZoneVelocity[]>([]);
-  const [alerts, setAlerts]         = useState<Alert[]>([]);
-  const [events, setEvents]         = useState<Event[]>([]);
-  const [offenders, setOffenders]   = useState<Offender[]>([]);
+  const [stats,    setStats]    = useState<Stats | null>(null);
+  const [velocity, setVelocity] = useState<ZoneVelocity[]>([]);
+  const [alerts,   setAlerts]   = useState<Alert[]>([]);
+  const [events,   setEvents]   = useState<Event[]>([]);
+  const [offenders,setOffenders]= useState<Offender[]>([]);
   const [offenderSearch, setOffenderSearch] = useState('');
-  const [riskFilter, setRiskFilter] = useState('ALL');
+  const [riskFilter,     setRiskFilter]     = useState('ALL');
   const [selectedOffender, setSelectedOffender] = useState<Offender | null>(null);
-  const [loading, setLoading]       = useState(true);
-  const [surges, setSurges]         = useState<SurgeAlert[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [surges,   setSurges]   = useState<SurgeAlert[]>([]);
   const [patrolPct] = useState(Math.floor(Math.random() * 40) + 30);
-  const [clock, setClock]           = useState(new Date().toLocaleTimeString());
+  const [clock,    setClock]    = useState(new Date().toLocaleTimeString());
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date().toLocaleTimeString()), 1000);
@@ -548,18 +629,22 @@ export default function MarvelDashboard() {
   const fetchAll = useCallback(async () => {
     try {
       const [s, v, a, e, o] = await Promise.allSettled([
-        axios.get('/api/stats'), axios.get('/api/velocity'), axios.get('/api/alerts'),
-        axios.get('/api/events'), axios.get('/api/investigation/offenders'),
+        axios.get('/api/stats'),
+        axios.get('/api/velocity'),
+        axios.get('/api/alerts'),
+        axios.get('/api/events'),
+        axios.get('/api/investigation/offenders'),
       ]);
       if (s.status === 'fulfilled') setStats(s.value.data);
       if (v.status === 'fulfilled') setVelocity(Array.isArray(v.value.data) ? v.value.data : v.value.data.zones || []);
       if (a.status === 'fulfilled') setAlerts(Array.isArray(a.value.data) ? a.value.data : a.value.data.alerts || []);
       if (e.status === 'fulfilled') {
-        const evs = (Array.isArray(e.value.data) ? e.value.data : e.value.data.events || []).slice(0, 100);
+        const raw = e.value.data;
+        const evs = (Array.isArray(raw) ? raw : raw.events || raw.items || []).slice(0, 200);
         setEvents(evs); setSurges(detectSurges(evs));
         if (evs.length > 0 && (window as any).triggerSonicPulse) {
           const latest = evs[0]; const coords = ZONE_CENTERS[latest.zone];
-          if (coords) (window as any).triggerSonicPulse(coords[0], coords[1], latest.crime_type?.includes('THEFT') ? 'HIGH' : 'STABLE');
+          if (coords) (window as any).triggerSonicPulse(coords[0], coords[1], deriveSeverity(latest) === 'CRITICAL' ? 'HIGH' : 'STABLE');
         }
       }
       if (o.status === 'fulfilled') setOffenders(Array.isArray(o.value.data) ? o.value.data : o.value.data.offenders || []);
@@ -593,8 +678,6 @@ export default function MarvelDashboard() {
 
   return (
     <div className="dashboard-container">
-
-      {/* Scanline overlay */}
       <div className="scanline-overlay" />
 
       {/* Header */}
@@ -617,17 +700,14 @@ export default function MarvelDashboard() {
 
       <AnimatePresence mode="wait">
         {!activeModule ? (
-          <motion.div key="hub" variants={hubContainer} initial="hidden" animate="show"
-            style={{ padding: '2rem 2rem 0' }}>
-
-            {/* Stats bar */}
+          <motion.div key="hub" variants={hubContainer} initial="hidden" animate="show" style={{ padding: '2rem 2rem 0' }}>
             {stats && (
               <motion.div variants={hubTile}
                 style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'rgba(255,255,255,0.04)', marginBottom: '1px' }}>
                 {[
-                  { label: 'EVENTS / 24H',  val: stats.total_24h, color: '#D2FF00' },
-                  { label: 'CRITICAL',      val: stats.critical,  color: '#FF3B30' },
-                  { label: 'WARNING',       val: stats.warning,   color: '#FF9500' },
+                  { label: 'EVENTS / 24H', val: stats.total_24h, color: '#D2FF00' },
+                  { label: 'CRITICAL',     val: stats.critical,  color: '#FF3B30' },
+                  { label: 'WARNING',      val: stats.warning,   color: '#FF9500' },
                 ].map((s, i) => (
                   <div key={i} className="tactical-card" style={{ textAlign: 'center', padding: '1.5rem' }}>
                     <div className="card-label">{s.label}</div>
@@ -636,13 +716,10 @@ export default function MarvelDashboard() {
                 ))}
               </motion.div>
             )}
-
-            {/* Module tiles */}
             <div className="hub-grid">
               {MODULES.map(m => (
                 <motion.div key={m.id} className="hub-tile" variants={hubTile}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.99 }}
+                  whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
                   onClick={() => setActiveModule(m.id)}>
                   <div className="tile-id">MOD_{m.id}</div>
                   <div className="tile-title">{m.title}</div>
@@ -723,7 +800,7 @@ export default function MarvelDashboard() {
                   <div className="section-label">OFFENDER_PROFILES</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '1px', background: 'rgba(255,255,255,0.04)', marginBottom: '1px' }}>
                     {[
-                      { label: 'TOTAL TRACKED', val: offenders.length,                                             color: '#D2FF00' },
+                      { label: 'TOTAL TRACKED', val: offenders.length, color: '#D2FF00' },
                       { label: 'HIGH RISK',     val: offenders.filter(o => o.predicted_risk === 'High').length,   color: '#FF3B30' },
                       { label: 'MEDIUM RISK',   val: offenders.filter(o => o.predicted_risk === 'Medium').length, color: '#FF9500' },
                       { label: 'AVG FIRs',      val: offenders.length ? (offenders.reduce((a, b) => a + b.fir_count, 0) / offenders.length).toFixed(1) : '0', color: '#00FFFF' },
@@ -786,9 +863,7 @@ export default function MarvelDashboard() {
                             </motion.div>
                           ))}
                           {filtered.length === 0 && (
-                            <div className="tactical-card" style={{ gridColumn: '1/-1' }}>
-                              <EmptyState icon="👤" msg="NO OFFENDERS MATCH FILTER" />
-                            </div>
+                            <div className="tactical-card" style={{ gridColumn: '1/-1' }}><EmptyState icon="👤" msg="NO OFFENDERS MATCH FILTER" /></div>
                           )}
                         </div>
                         <AnimatePresence>
@@ -854,14 +929,12 @@ export default function MarvelDashboard() {
       <div className="live-ticker-wrap">
         <div style={{ display: 'flex', animation: 'ticker 40s linear infinite', gap: '4rem', whiteSpace: 'nowrap' }}>
           {alerts.map((a, i) => <span key={i} style={{ color: a.severity === 'CRITICAL' ? '#FF3B30' : a.severity === 'HIGH' ? '#FF9500' : '#D2FF00' }}>▸ {a.zone} : {a.message}</span>)}
-          <span style={{ color: '#333' }}>[ SENTINEL HUD v3.1 // ALL_MODULES_ACTIVE // {new Date().toLocaleDateString('en-IN')} ]</span>
+          <span style={{ color: '#333' }}>[ SENTINEL HUD v3.2 // ALL_MODULES_WIRED // {new Date().toLocaleDateString('en-IN')} ]</span>
         </div>
       </div>
 
-      {/* Copilot */}
       <div style={{ position: 'fixed', bottom: '80px', right: '3rem', zIndex: 10000 }}><MahaCrimeCopilot /></div>
 
-      {/* Surge alerts */}
       <AnimatePresence>
         {activeModule === null && surges.length > 0 && (
           <motion.div initial={{ opacity:0, x:20 }} animate={{ opacity:1, x:0 }} exit={{ opacity:0, x:20 }}
@@ -877,7 +950,6 @@ export default function MarvelDashboard() {
           </motion.div>
         )}
       </AnimatePresence>
-
     </div>
   );
 }
