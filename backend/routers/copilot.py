@@ -22,6 +22,7 @@ Design principles
   4. Groq errors surface as clean 503 responses, not 500 stack traces.
   5. All queries are logged with timestamp + endpoint for audit trail.
   6. BNS 2023 (Bharatiya Nyaya Sanhita) sections are included alongside IPC sections.
+  7. query-laws accepts BOTH plain string body AND {"query":"..."} JSON — backward compat.
 """
 
 from __future__ import annotations
@@ -29,9 +30,9 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-from fastapi import APIRouter, Body, HTTPException, status
+from fastapi import APIRouter, Body, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from services.gemini_service import generate
@@ -169,17 +170,14 @@ async def analyze_fir_full(req: FIRRequest):
 
     This is the primary endpoint the frontend FIR panel should call.
     """
-    # --- Run the local intelligence pipeline (NLP + DB + FAISS) ---
     intel = await analyse_fir(
         description=req.text,
         fir_number=req.fir_number,
         save_to_db=req.save_to_db,
     )
 
-    # --- Enrich IPC sections with BNS 2023 equivalents ---
     intel["ipc_sections"] = _enrich_with_bns(intel.get("ipc_sections", []))
 
-    # --- Generate AI narrative summary via Groq ---
     sections_text = ", ".join(
         f"{s['section']} ({s.get('bns_equivalent', 'N/A')})"
         for s in intel["ipc_sections"]
@@ -260,21 +258,48 @@ Respond ONLY in this exact JSON — no markdown:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Endpoint 3: Legal Q&A
+# Accepts BOTH formats:
+#   - New JSON body:    {"query": "...", "context": "..."}
+#   - Legacy string:    "what is IPC 302?"   (plain string body, Content-Type: application/json)
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/query-laws")
-async def query_laws(req: LegalQueryRequest):
+async def query_laws(request: Request):
     """
     General legal Q&A covering IPC, BNS 2023, CrPC/BNSS 2023, IT Act, NDPS, POCSO.
-    Optionally include context (zone, crime type) to get more targeted answers.
+    Accepts both {"query": "..."} JSON and legacy plain-string body.
     """
-    context_block = f"\nAdditional context: {req.context}" if req.context else ""
+    body = await request.body()
+    query_text: str = ""
+    context_text: str = ""
+
+    try:
+        parsed = json.loads(body)
+        if isinstance(parsed, str):
+            # Legacy: body was a JSON-encoded string e.g. "what is IPC 302?"
+            query_text = parsed
+        elif isinstance(parsed, dict):
+            query_text = parsed.get("query", "")
+            context_text = parsed.get("context", "") or ""
+        else:
+            query_text = str(parsed)
+    except (json.JSONDecodeError, ValueError):
+        # Totally raw string body
+        query_text = body.decode("utf-8", errors="replace").strip().strip('"')
+
+    if not query_text or len(query_text) < 3:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide a non-empty 'query' field or a plain string body."
+        )
+
+    context_block = f"\nAdditional context: {context_text}" if context_text else ""
     prompt = f"""You are an expert criminal law counsel advising Maharashtra Police.
 
 Provide a precise, objective legal analysis. Reference IPC sections AND their BNS 2023 equivalents where relevant.
 Do not moralize. Treat the query as a legitimate investigative inquiry.{context_block}
 
-Query: {req.query}
+Query: {query_text}
 
 Respond ONLY in this exact JSON:
 {{
@@ -304,7 +329,6 @@ async def draft_sections(req: SectionDraftRequest):
     Auto-generate formal charge-sheet language for a list of IPC sections
     based on the crime type and incident summary.
     """
-    # Enrich with BNS equivalents
     bns_notes = []
     for sec in req.ipc_sections:
         bns = _BNS_IPC_MAP.get(sec)
@@ -350,7 +374,6 @@ Respond ONLY in this JSON:
 async def suspect_profile(req: SuspectProfileRequest):
     """
     Generate a criminal behavioral profile from evidence text / witness statements.
-    Useful for building an offender profile before interrogation.
     """
     crime_context = f"Known crime type: {req.crime_type}\n" if req.crime_type else ""
 
@@ -428,7 +451,6 @@ async def bns_lookup(req: BNSLookupRequest):
     Return the BNS 2023 equivalent for an IPC section.
     Uses local map first; falls back to Groq for uncommon sections.
     """
-    # Local map fast-path
     local = _BNS_IPC_MAP.get(req.ipc_section)
     if local:
         return {
@@ -439,7 +461,6 @@ async def bns_lookup(req: BNSLookupRequest):
             "source": "local_map",
         }
 
-    # Groq fallback for sections not in local map
     prompt = f"""You are an expert on Indian criminal law.
 
 Provide the BNS 2023 (Bharatiya Nyaya Sanhita) equivalent for:
