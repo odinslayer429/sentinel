@@ -29,7 +29,7 @@ class EventOut(BaseModel):
     published_at: Optional[datetime]
     ingested_at: Optional[datetime]
     source: Optional[str]
-    url: Optional[str]          # live hyperlink to source article
+    url: Optional[str]
     is_processed: Optional[bool]
     class Config:
         from_attributes = True
@@ -65,18 +65,21 @@ def summary(db: Session = Depends(get_db)):
 @router.get("/recent", response_model=List[EventOut])
 def recent(
     limit: int = Query(200, ge=1, le=500),
-    hours: int = Query(3, ge=1, le=168),   # default: last 3 hours, max 7 days
-    since: Optional[datetime] = None,       # explicit ISO cutoff overrides hours
+    hours: int = Query(3, ge=0, le=168),   # FIX: ge=0 so hours=0 is valid when `since` is provided
+    since: Optional[datetime] = None,
     db: Session = Depends(get_db),
 ):
     """
     Return recent crime events.
-    - `hours`  (default 3)  — look back N hours from now.
-    - `since`               — explicit ISO-8601 datetime cutoff (overrides hours).
-    - `limit`  (default 200) — max rows returned.
+    - `hours`  (default 3, min 0) — look back N hours from now.
+    - `since`                     — explicit ISO-8601 datetime cutoff (overrides hours).
+    - `limit`  (default 200)      — max rows returned.
     Falls back to last `limit` rows across all time if the time-window returns nothing.
+
+    NOTE: Frontend poll loop passes hours=0 alongside `since`. hours=0 is now valid
+    because `since` takes precedence when provided. ge changed from 1 → 0.
     """
-    cutoff = since if since else (datetime.utcnow() - timedelta(hours=hours))
+    cutoff = since if since else (datetime.utcnow() - timedelta(hours=max(hours, 1)))
     q = (
         db.query(CrimeEvent)
         .filter(CrimeEvent.published_at >= cutoff)
@@ -85,7 +88,6 @@ def recent(
     )
     results = q.all()
 
-    # Fallback: if window is empty (fresh DB / no recent data) return latest rows
     if not results:
         results = (
             db.query(CrimeEvent)
