@@ -30,12 +30,39 @@ const deriveSeverity = (ev:Event) => { if(ev.severity)return ev.severity.toUpper
 const ZONE_CENTERS:Record<string,[number,number]> = { Z01:[18.9067,72.8147],Z02:[18.9438,72.8249],Z03:[19.0396,72.8528],Z04:[19.0596,72.8295],Z05:[19.1197,72.8468],Z06:[19.2294,72.8567],Z07:[19.0726,72.8847],Z08:[19.0867,72.9081],Z09:[19.1726,72.9563],Z10:[19.1197,72.9070],Z11:[19.0330,73.0297],Z12:[19.2183,72.9781] };
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
-const Spinner = () => (
-  <div style={{display:'flex',alignItems:'center',justifyContent:'center',padding:'4rem',flexDirection:'column',gap:'1rem'}}>
-    <div style={{width:32,height:32,border:'2px solid rgba(255,255,255,0.06)',borderTop:'2px solid #D2FF00',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
-    <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.5rem',color:'var(--text-3)',letterSpacing:'0.3em'}}>LOADING...</div>
-  </div>
-);
+/**
+ * Step 2: Skeleton shimmer — replaces Spinner for first-load states.
+ * Each panel gets a skeleton that matches its rough shape.
+ */
+function SkeletonSection() {
+  return (
+    <div style={{padding:'1rem 0'}}>
+      {/* stat row */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'1px',background:'var(--border)',marginBottom:'2rem'}}>
+        {[0,1,2].map(i=>(
+          <div key={i} style={{background:'var(--bg-surface)',padding:'2rem',textAlign:'center'}}>
+            <div className="skeleton skeleton-stat"/>
+            <div className="skeleton skeleton-label"/>
+          </div>
+        ))}
+      </div>
+      {/* card row */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'1px',background:'var(--border)'}}>
+        {[0,1,2,3].map(i=>(
+          <div key={i} style={{background:'var(--bg-surface)',padding:'2rem'}}>
+            <div className="skeleton" style={{height:'0.75rem',width:'40%',marginBottom:'1rem'}}/>
+            <div className="skeleton" style={{height:'1.5rem',width:'70%',marginBottom:'0.75rem'}}/>
+            <div className="skeleton" style={{height:'0.6rem',width:'90%',marginBottom:'0.5rem'}}/>
+            <div className="skeleton" style={{height:'0.6rem',width:'60%'}}/>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const Spinner = () => <SkeletonSection />;
+
 const EmptyState = ({icon,msg}:{icon:string;msg:string}) => (
   <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'4rem',gap:'1rem'}}>
     <div style={{fontSize:'2.5rem',opacity:0.3}}>{icon}</div>
@@ -49,6 +76,28 @@ const ErrorState = ({msg,onRetry}:{msg:string;onRetry:()=>void}) => (
   </div>
 );
 
+// ─── Ripple helper ────────────────────────────────────────────────────────────
+/**
+ * Step 2 polish: attach ripple on click to any .ripple-btn element.
+ */
+function useRipple() {
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const btn = (e.target as HTMLElement).closest('.ripple-btn') as HTMLElement | null;
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      const circle = document.createElement('span');
+      circle.className = 'ripple-circle';
+      circle.style.left = `${e.clientX - rect.left}px`;
+      circle.style.top  = `${e.clientY - rect.top}px`;
+      btn.appendChild(circle);
+      circle.addEventListener('animationend', () => circle.remove());
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
+}
+
 // ─── Scroll-reveal hook ───────────────────────────────────────────────────────
 function useReveal() {
   useEffect(() => {
@@ -56,8 +105,10 @@ function useReveal() {
       const els = document.querySelectorAll('.scroll-section:not(.revealed)');
       if (!els.length) return;
       const io = new IntersectionObserver(
-        entries => entries.forEach(e => { if(e.isIntersecting) { e.target.classList.add('revealed'); io.unobserve(e.target); } }),
-        { threshold: 0.06 }
+        entries => entries.forEach(e => {
+          if (e.isIntersecting) { e.target.classList.add('revealed'); io.unobserve(e.target); }
+        }),
+        { threshold: 0.04 }   // lower = triggers sooner on tall sections
       );
       els.forEach(el => io.observe(el));
       return io;
@@ -127,7 +178,8 @@ function WeeklyScheduler() {
   const generate=()=>{ const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']; setSchedule(days.map(day=>({day,shift:day.startsWith('S')?'Double':'Standard',mult:day.startsWith('S')?1.5:1.0}))); };
   return(
     <div>
-      <button onClick={generate} className="back-btn" style={{marginBottom:'1.5rem'}}>GENERATE SCHEDULE</button>
+      {/* Step 7: lime sweep button */}
+      <button onClick={generate} className="back-btn btn-lime-sweep ripple-btn" style={{marginBottom:'1.5rem'}}>GENERATE SCHEDULE</button>
       <AnimatePresence>
         {schedule.length>0&&(
           <motion.table initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0}}>
@@ -154,6 +206,7 @@ function AIIntakeSection() {
   return(
     <div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1rem'}}>
+        {/* Step 8-ish: drag-over glow is already wired via inline style below */}
         <div onClick={()=>fileInputRef.current?.click()} onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={e=>{e.preventDefault();setDragOver(false);if(e.dataTransfer.files?.[0]){setFile(e.dataTransfer.files[0]);setComplaint('');}}} style={{border:`2px dashed ${dragOver?'var(--lime)':file?'rgba(210,255,0,0.4)':'rgba(255,255,255,0.1)'}`,padding:'2rem',textAlign:'center',cursor:'pointer',background:dragOver?'rgba(210,255,0,0.06)':file?'rgba(210,255,0,0.03)':'transparent',transition:'all 0.2s',boxShadow:dragOver?'0 0 20px rgba(210,255,0,0.15)':'none'}}>
           <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>{file?'📄':'📤'}</div>
           <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.55rem',letterSpacing:'0.2em',color:file?'#D2FF00':'var(--text-3)'}}>{file?file.name.toUpperCase():'DROP PDF OR CLICK TO UPLOAD'}</div>
@@ -162,7 +215,7 @@ function AIIntakeSection() {
         <textarea value={complaint} onChange={e=>{setComplaint(e.target.value);setFile(null);}} disabled={!!file} placeholder="OR PASTE FIR TEXT MANUALLY..." style={{width:'100%',minHeight:'130px',padding:'1rem',resize:'none',opacity:file?0.3:1}}/>
       </div>
       <input type="file" ref={fileInputRef} onChange={e=>{if(e.target.files?.[0]){setFile(e.target.files[0]);setComplaint('');}}} accept=".pdf" style={{display:'none'}}/>
-      <button onClick={analyze} className="back-btn" disabled={!complaint&&!file} style={{width:'100%',justifyContent:'center'}}>{loading?'READING FIR...':'ANALYSE FIR'}</button>
+      <button onClick={analyze} className="back-btn ripple-btn" disabled={!complaint&&!file} style={{width:'100%',justifyContent:'center'}}>{loading?'READING FIR...':'ANALYSE FIR'}</button>
       {loading&&<Spinner/>}
       {error&&<ErrorState msg={error} onRetry={analyze}/>}
       <AnimatePresence>{result&&!loading&&(<motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0}} style={{marginTop:'2rem',borderTop:'1px solid rgba(210,255,0,0.15)',paddingTop:'1.5rem'}}><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'1px',background:'var(--border)',marginBottom:'1px'}}>{[{label:'ACCUSED NAME',val:result.accused_name,color:'#D2FF00'},{label:'LOCATION',val:result.location},{label:'CRIME TYPE',val:result.crime_type,color:'#FF3B30'},{label:'DATE / TIME',val:result.date_time}].map((item,i)=>(<div key={i} className="tactical-card" style={{padding:'1rem'}}><div className="card-label">{item.label}</div><div style={{fontWeight:900,color:item.color||'var(--text-1)',fontSize:'0.8rem'}}>{item.val||'—'}</div></div>))}</div><div className="tactical-card" style={{marginTop:'1px'}}><div className="card-label">CASE SUMMARY</div><div style={{fontSize:'0.75rem',lineHeight:1.7,color:'var(--text-2)'}}>{result.description_summary}</div></div></motion.div>)}</AnimatePresence>
@@ -186,7 +239,7 @@ function NeuralNodePanel() {
   return(
     <div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'1px',background:'var(--border)',marginBottom:'3rem'}}>
-        {[{label:'DEPLOY NOW',val:criticalCount,color:'#FF3B30'},{label:'UNUSUAL SPIKES',val:anomalies.length,color:'#FF9500'},{label:'ZONES MONITORED',val:forecast.length,color:'#D2FF00'}].map((s,i)=>(<div key={i} className="tactical-card" style={{textAlign:'center',padding:'2rem'}}><div style={{fontFamily:'Space Mono,monospace',fontSize:'2.5rem',fontWeight:900,color:s.color,textShadow:`0 0 20px ${s.color}44`}}>{s.val}</div><div className="card-label" style={{marginTop:'0.5rem'}}>{s.label}</div></div>))}
+        {[{label:'DEPLOY NOW',val:criticalCount,color:'#FF3B30'},{label:'UNUSUAL SPIKES',val:anomalies.length,color:'#FF9500'},{label:'ZONES MONITORED',val:forecast.length,color:'#D2FF00'}].map((s,i)=>(<div key={i} className="tactical-card" style={{textAlign:'center',padding:'2rem'}}><div style={{fontFamily:'Space Mono,monospace',fontSize:'2.5rem',fontWeight:900,color:s.color,textShadow:`0 0 20px ${s.color}44`}}><CountUp to={s.val}/></div><div className="card-label" style={{marginTop:'0.5rem'}}>{s.label}</div></div>))}
       </div>
       {hotspots.length>0&&(<><div className="section-label">WHERE TO DEPLOY — NEXT 3 HRS</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'1px',background:'var(--border)',marginBottom:'2rem'}}>{hotspots.map((h,i)=>{const urg=intensityToUrgency(h.predicted_intensity,h.crimes_last_24h);return<IntelBrick key={i} index={i} zone={h.zone_id} headline={urg.label} detail={urg.detail} action={riskToAction(h.risk_level)} crimeType={h.top_crime_type} color={urg.color}/>;})}</div></>)}
       {anomalies.length>0&&(<><div className="section-label">UNUSUAL ACTIVITY TODAY</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'1px',background:'var(--border)',marginBottom:'2rem'}}>{anomalies.map((a,i)=>{const note=anomalyToNote(a.severity,a.latest_count,a.mean_daily);return<IntelBrick key={i} index={i} zone={a.zone_id} headline={note.headline} detail={note.detail} action={riskToAction(a.severity)} color={note.color} extra={`30-DAY AVG: ${Math.round(a.mean_daily)} crimes/day`}/>;})}</div></>)}
@@ -226,7 +279,7 @@ function OSINTPanel() {
   return(
     <div>
       <div style={{display:'flex',gap:'0.5rem',marginBottom:'1.5rem',flexWrap:'wrap'}}>{(['URL','PHONE','NAME'] as const).map(t=>(<button key={t} onClick={()=>setScanType(t)} style={{padding:'0.6rem 1.25rem',border:`1px solid ${scanType===t?'var(--lime)':'rgba(255,255,255,0.1)'}`,background:scanType===t?'rgba(210,255,0,0.08)':'transparent',color:scanType===t?'#D2FF00':'var(--text-3)',fontFamily:'Space Mono,monospace',fontSize:'0.55rem',cursor:'pointer',letterSpacing:'0.15em',transition:'all 0.2s'}}>{t==='URL'?'WEBSITE LINK':t==='PHONE'?'PHONE NUMBER':'PERSON NAME'}</button>))}</div>
-      <div style={{display:'flex',gap:'1rem',marginBottom:'1.5rem'}}><input value={target} onChange={e=>setTarget(e.target.value)} onKeyDown={e=>e.key==='Enter'&&scan()} placeholder={scanType==='URL'?'Paste suspicious link...':scanType==='PHONE'?'+91 XXXXXXXXXX':'Enter suspect name...'} style={{flex:1,padding:'0.9rem 1rem',fontSize:'0.7rem'}}/><button onClick={scan} disabled={!target.trim()||loading} className="back-btn" style={{minWidth:120}}>{loading?'CHECKING...':'CHECK NOW'}</button></div>
+      <div style={{display:'flex',gap:'1rem',marginBottom:'1.5rem'}}><input value={target} onChange={e=>setTarget(e.target.value)} onKeyDown={e=>e.key==='Enter'&&scan()} placeholder={scanType==='URL'?'Paste suspicious link...':scanType==='PHONE'?'+91 XXXXXXXXXX':'Enter suspect name...'} style={{flex:1,padding:'0.9rem 1rem',fontSize:'0.7rem'}}/><button onClick={scan} disabled={!target.trim()||loading} className="back-btn ripple-btn" style={{minWidth:120}}>{loading?'CHECKING...':'CHECK NOW'}</button></div>
       {loading&&<Spinner/>}
       {error&&<ErrorState msg={error} onRetry={scan}/>}
       <AnimatePresence>{result&&!loading&&(<motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0}} className="tactical-card" style={{borderLeft:`4px solid ${vc(result.verdict)}`}}>{result.source==='HEURISTIC'&&<div style={{fontFamily:'Space Mono,monospace',fontSize:'0.5rem',color:'#FF9500',letterSpacing:'0.15em',marginBottom:'1rem',padding:'0.5rem',background:'rgba(255,149,0,0.06)',border:'1px solid rgba(255,149,0,0.2)'}}>⚠ HEURISTIC ONLY</div>}<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.5rem'}}><div><div className="card-label">VERDICT</div><div style={{fontFamily:'Space Mono,monospace',fontWeight:900,fontSize:'1.4rem',color:vc(result.verdict),marginTop:4}}>{result.verdict}</div></div><div style={{textAlign:'right'}}><div className="card-label">RISK SCORE</div><div style={{fontFamily:'Space Mono,monospace',fontSize:'3rem',fontWeight:900,color:vc(result.verdict),lineHeight:1}}>{result.trust_score}</div></div></div>{result.flags?.length>0&&result.flags.map((f:string,i:number)=>(<div key={i} style={{padding:'0.6rem 1rem',marginBottom:'0.4rem',background:'rgba(255,59,48,0.05)',border:'1px solid rgba(255,59,48,0.15)',color:'#FF3B30',fontFamily:'Space Mono,monospace',fontSize:'0.6rem'}}>⚠ {f}</div>))}{result.flags?.length===0&&<div style={{fontFamily:'Space Mono,monospace',fontSize:'0.6rem',color:'#34C759'}}>✓ NO PROBLEMS DETECTED</div>}</motion.div>)}</AnimatePresence>
@@ -265,11 +318,26 @@ export default function MarvelDashboard() {
   const [wsNewCount,setWsNewCount] = useState(0);
   const [clock,    setClock]    = useState(new Date().toLocaleTimeString());
   const [patrolPct]= useState(Math.floor(Math.random()*40)+30);
+  // Track whether stats have been revealed so CountUp fires exactly once
+  const [statsRevealed, setStatsRevealed] = useState(false);
+  const statsRef = useRef<HTMLDivElement>(null);
 
-  // Reveal on scroll
   useReveal();
+  useRipple();
 
   useEffect(()=>{ const t=setInterval(()=>setClock(new Date().toLocaleTimeString()),1000); return()=>clearInterval(t); },[]);
+
+  // Step 3: trigger CountUp when the stats bar first scrolls into view
+  useEffect(() => {
+    const el = statsRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setStatsRevealed(true); io.disconnect(); } },
+      { threshold: 0.1 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   const { connected: wsConnected } = useWebSocket({
     onNewEvent:(ev)=>{
@@ -283,7 +351,6 @@ export default function MarvelDashboard() {
 
   const detectSurges=(evs:any[])=>{ const zones=[...new Set(evs.map((e:any)=>e.zone))].filter(Boolean); return zones.filter(z=>evs.filter((e:any)=>e.zone===z).length>5).map(z=>({zone:z as string,ratio:2.0,severity:'SURGE' as const,message:'Multiple incidents — consider deploying'})); };
 
-  // fetchAll — never blocks the page. All calls use allSettled.
   const fetchAll = useCallback(async () => {
     try {
       const [s, v, a, e, o] = await Promise.allSettled([
@@ -293,10 +360,8 @@ export default function MarvelDashboard() {
         axios.get('/api/events/recent?limit=200&hours=3'),
         axios.get('/api/investigation/offenders'),
       ]);
-
       if (s.status === 'fulfilled') {
         const d = s.value.data;
-        // Support both the old shape (total_24h) and the new shape (crimes_today / total_crimes)
         setStats({
           total_24h: d.total_24h ?? d.crimes_today ?? d.total_crimes ?? 0,
           critical:  d.critical  ?? d.high_severity_count ?? 0,
@@ -319,9 +384,7 @@ export default function MarvelDashboard() {
         setSurges(detectSurges(evs));
       }
       if (o.status === 'fulfilled') setOffenders(Array.isArray(o.value.data) ? o.value.data : o.value.data.offenders || []);
-    } catch (_) {
-      // silently ignore — page renders with empty state
-    }
+    } catch (_) {}
   }, []);
 
   useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, [fetchAll]);
@@ -331,7 +394,7 @@ export default function MarvelDashboard() {
       <ScrollBar/>
       <div className="scanline-overlay"/>
 
-      {/* HEADER */}
+      {/* HEADER — untouched */}
       <header className="hud-header">
         <div className="system-title glitch-text">SENTINEL<span>.HUD</span></div>
         <div style={{display:'flex',gap:'2rem',alignItems:'center'}}>
@@ -355,13 +418,25 @@ export default function MarvelDashboard() {
         </div>
       </header>
 
-      {/* STATS BAR — always visible, no loading gate */}
-      <div className="scroll-section revealed" style={{padding:'3rem',borderBottom:'1px solid var(--border)'}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'1px',background:'var(--border)'}}>
-          {[{label:'INCIDENTS TODAY',val:stats?.total_24h||0,color:'var(--lime)'},{label:'CRITICAL — ACT NOW',val:stats?.critical||0,color:'var(--red)'},{label:'WARNINGS',val:stats?.warning||0,color:'var(--orange)'}].map((s,i)=>(
-            <div key={i} className="hub-stat-cell"><div className="hub-stat-val" style={{color:s.color}}><CountUp to={s.val}/></div><div className="card-label" style={{marginTop:'0.75rem'}}>{s.label}</div></div>
-          ))}
-        </div>
+      {/*
+        ── STEP 3: HERO STATS BAR ────────────────────────────────────────────
+        Full-width, no card wrapper, no background — bleeds into page bg.
+        Numbers count up via CountUp triggered by IntersectionObserver.
+        revealed class added manually (it's always visible at top so always pre-revealed).
+      */}
+      <div ref={statsRef} className="hero-stats-bar scroll-section revealed">
+        {[
+          {label:'INCIDENTS TODAY',  val:statsRevealed?(stats?.total_24h||0):0, color:'var(--lime)'},
+          {label:'CRITICAL — ACT NOW',val:statsRevealed?(stats?.critical||0):0, color:'var(--red)'},
+          {label:'WARNINGS',          val:statsRevealed?(stats?.warning||0):0,  color:'var(--orange)'},
+        ].map((s,i)=>(
+          <div key={i} className="hero-stat-cell">
+            <div className="hero-stat-val" style={{color:s.color}}>
+              <CountUp to={s.val}/>
+            </div>
+            <div className="hero-stat-label">{s.label}</div>
+          </div>
+        ))}
       </div>
 
       {/* 01 — ANOMALY INDEX */}
