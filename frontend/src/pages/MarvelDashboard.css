@@ -369,6 +369,55 @@ body {
 }
 
 /* ════════════════════════════════════════════════════════════════════
+   STEP 4: ANOMALY INDEX — stagger dividers between sub-groups
+   Each severity tier (SURGING / ELEVATED / QUIET) gets a faint rule
+   with a label etched into it, and the cards stagger in per-group.
+════════════════════════════════════════════════════════════════════ */
+
+/* The thin labelled rule that separates tiers */
+.anomaly-tier-rule {
+  position: relative;
+  height: 1px;
+  background: rgba(255,255,255,0.06);
+  margin: 2.5rem 0 2rem;
+  overflow: visible;
+}
+.anomaly-tier-rule::after {
+  content: attr(data-label);
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg);          /* same as page bg — cuts through the line */
+  padding: 0 0.75rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.42rem;
+  letter-spacing: 0.35em;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* Stagger cards inside an anomaly tier on reveal */
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.anomaly-tier-cards > * {
+  opacity: 0;
+  animation: stagger-in 0.4s cubic-bezier(0.22,1,0.36,1) forwards;
+}
+/* Each direct child gets its own delay via nth-child */
+.anomaly-tier-cards > *:nth-child(1)  { animation-delay: 0.00s; }
+.anomaly-tier-cards > *:nth-child(2)  { animation-delay: 0.05s; }
+.anomaly-tier-cards > *:nth-child(3)  { animation-delay: 0.10s; }
+.anomaly-tier-cards > *:nth-child(4)  { animation-delay: 0.15s; }
+.anomaly-tier-cards > *:nth-child(5)  { animation-delay: 0.20s; }
+.anomaly-tier-cards > *:nth-child(6)  { animation-delay: 0.25s; }
+.anomaly-tier-cards > *:nth-child(7)  { animation-delay: 0.30s; }
+.anomaly-tier-cards > *:nth-child(8)  { animation-delay: 0.35s; }
+.anomaly-tier-cards > *:nth-child(n+9) { animation-delay: 0.38s; }
+
+/* ════════════════════════════════════════════════════════════════════
    BUTTONS
 ════════════════════════════════════════════════════════════════════ */
 .back-btn {
