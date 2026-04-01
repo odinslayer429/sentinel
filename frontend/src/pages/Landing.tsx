@@ -1,98 +1,352 @@
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './Landing.css'
 
+// ─── Module data ───────────────────────────────────────────────────────────────
 const MODULES = [
-  { index:'01', label:'SPATIAL INTELLIGENCE', title:'Crime Heat Map', icon:'🗺', side:'left' as const, color:'#D2FF00',
-    desc:'A real-time Leaflet map overlaid with AI-generated danger scores across all 20+ zones of Maharashtra. Velocity-weighted heatmap clusters update every 60 seconds using predictive output, giving command staff a live spatial picture of where incidents are concentrating before they escalate.',
-    stats:['20+ ZONES','LIVE HEATMAP','VELOCITY WEIGHTED'] },
-  { index:'02', label:'LP OPTIMIZER', title:'Force Allocator', icon:'⚡', side:'right' as const, color:'#5AC8FA',
-    desc:'Linear programming meets AI briefing. The force allocator solves a constrained optimisation problem across available personnel and active threat zones, then uses Gemini to generate a plain-language tactical briefing in real time. Commanders get numbers and the reasoning behind them.',
-    stats:['LINEAR PROG.','GEMINI AI','LIVE BRIEFING'] },
-  { index:'03', label:'OPERATIONS CONTROL', title:'Dispatch Board', icon:'📡', side:'left' as const, color:'#FF9500',
-    desc:'A Kanban-style command board wired directly to the backend task queue. Pending alerts auto-create dispatch tasks. Officers can acknowledge, escalate, and resolve assignments in one click. Auto-refreshes every 15 seconds — zero manual reload required.',
-    stats:['KANBAN FLOW','15s REFRESH','ONE-CLICK ACK'] },
-  { index:'04', label:'LIVE FEED ANALYSIS', title:'Intel Stream', icon:'📶', side:'right' as const, color:'#FF2D55',
-    desc:'A real-time scrolling feed of all crime events, alerts, and system notifications ingested by Sentinel. Filterable by severity, zone, and time range. Supports delta polling — only new events since the last fetch are streamed, keeping bandwidth minimal even under high event volume.',
-    stats:['DELTA POLLING','SEVERITY FILTER','ZONE FILTER'] },
-  { index:'05', label:'AI ASSISTANT', title:'MahaCrime Copilot', icon:'🤖', side:'left' as const, color:'#BF5AF2',
-    desc:'A conversational AI powered by Gemini 1.5 Pro with full context of the current city crime state. Ask it anything — "What zones are critical right now?" or "Should I deploy more units to Thane?" — and get a grounded, data-backed response in natural language.',
-    stats:['GEMINI 1.5 PRO','CONTEXT-AWARE','NATURAL LANG.'] },
-  { index:'06', label:'ACOUSTIC PATTERN ANALYSIS', title:'Sonic Pulse Map', icon:'🔊', side:'right' as const, color:'#34C759',
-    desc:'Experimental module that cross-references reported incident density with simulated acoustic footprint data to identify areas of abnormal sound activity. Useful for crowded venues, festivals, and border zones where visual surveillance has blind spots.',
-    stats:['ACOUSTIC','CROWD ANALYSIS','BLIND SPOT COVER'] },
-  { index:'07', label:'PREDICTIVE ENGINE', title:'Risk Score Engine', icon:'🧠', side:'left' as const, color:'#FF6B35',
-    desc:'The statistical backbone of Sentinel. A multi-factor ML model scoring each zone 0–100 for predicted incident probability in the next 6 hours. Trained on historical Maharashtra Police records, time-of-day, day-of-week, and environmental factors. Powers the heatmap, force allocator, and AI copilot.',
-    stats:['ML SCORING','6-HOUR WINDOW','MULTI-FACTOR'] },
-  { index:'08', label:'OFFENDER REGISTRY', title:'OSINT Scanner', icon:'🔍', side:'right' as const, color:'#FF3B30',
-    desc:'Search and profile known offenders across Maharashtra database. Cross-references arrest records, recidivism scores, and zone activity clusters. OSINT-enriched profiles surface social pattern data to help investigators build connections between events, locations, and individuals.',
-    stats:['PROFILE SEARCH','RECIDIVISM SCORE','ZONE ACTIVITY'] },
-  { index:'09', label:'COMMAND ANALYTICS', title:'Stats Dashboard', icon:'📊', side:'left' as const, color:'#D2FF00',
-    desc:'A high-level executive view of system performance, alert resolution rates, zone response times, and AI prediction accuracy. Historical trend lines let commanders measure what matters: is crime going up or down? Are we deploying faster? Sentinel closes the feedback loop.',
-    stats:['TREND LINES','RESOLUTION RATE','AI ACCURACY'] },
-]
+  {
+    id: '01', label: 'ANOMALY INDEX', title: 'Anomaly Index',
+    color: '#D2FF00', icon: '⚠',
+    desc: 'Real-time statistical deviation detector scanning all 20+ Maharashtra zones for abnormal incident velocity. Z-score outliers are surfaced instantly, giving command the first signal before a pattern solidifies.',
+    stats: ['Z-SCORE ENGINE', '20+ ZONES', 'REAL-TIME'],
+    visual: 'anomaly',
+  },
+  {
+    id: '02', label: 'SPATIAL INTELLIGENCE', title: 'Crime Heat Map',
+    color: '#FF6B35', icon: '🗺',
+    desc: 'A live Leaflet map overlaid with AI-generated danger scores across every zone of Maharashtra. Velocity-weighted heatmap clusters update every 60 seconds using predictive output.',
+    stats: ['LEAFLET MAP', 'VELOCITY WEIGHTED', '60s REFRESH'],
+    visual: 'heatmap',
+  },
+  {
+    id: '03', label: 'PREDICTIVE ENGINE', title: 'Neural Risk Nodes',
+    color: '#5AC8FA', icon: '🧠',
+    desc: 'A multi-factor LSTM model scoring each zone 0–100 for predicted incident probability in the next 6 hours. Trained on Maharashtra Police records, temporal patterns, and environmental factors.',
+    stats: ['LSTM MODEL', '6-HOUR WINDOW', 'MULTI-FACTOR'],
+    visual: 'neural',
+  },
+  {
+    id: '04', label: 'LP OPTIMIZER', title: 'Force Allocator',
+    color: '#BF5AF2', icon: '⚡',
+    desc: 'Linear programming meets AI briefing. The force allocator solves a constrained optimisation problem across available personnel and threat zones, then uses Gemini to generate a plain-language tactical briefing.',
+    stats: ['LINEAR PROG.', 'GEMINI AI', 'LIVE BRIEFING'],
+    visual: 'allocator',
+  },
+  {
+    id: '05', label: 'OPERATIONS CONTROL', title: 'Dispatch Board',
+    color: '#FF9500', icon: '📡',
+    desc: 'A Kanban-style command board wired to the backend task queue. Pending alerts auto-create dispatch tasks. Officers acknowledge, escalate, and resolve in one click. Auto-refreshes every 15 seconds.',
+    stats: ['KANBAN FLOW', '15s REFRESH', 'ONE-CLICK ACK'],
+    visual: 'dispatch',
+  },
+  {
+    id: '06', label: 'LIVE FEED ANALYSIS', title: 'Intel Stream',
+    color: '#FF2D55', icon: '📶',
+    desc: 'A real-time scrolling feed of all crime events, alerts, and system notifications. Filterable by severity, zone, and time range. Supports delta polling — only new events are streamed, keeping bandwidth minimal.',
+    stats: ['DELTA POLLING', 'SEVERITY FILTER', 'ZONE FILTER'],
+    visual: 'stream',
+  },
+  {
+    id: '07', label: 'AI ASSISTANT', title: 'MahaCrime Copilot',
+    color: '#34C759', icon: '🤖',
+    desc: 'Conversational AI powered by Gemini 1.5 Pro with full context of the current city crime state. Ask anything — "What zones are critical right now?" — and get a data-backed response in natural language.',
+    stats: ['GEMINI 1.5 PRO', 'CONTEXT-AWARE', 'NATURAL LANG.'],
+    visual: 'copilot',
+  },
+  {
+    id: '08', label: 'OFFENDER REGISTRY', title: 'OSINT Scanner',
+    color: '#FF3B30', icon: '🔍',
+    desc: 'Search and profile known offenders across the Maharashtra database. Cross-references arrest records, recidivism scores, and zone activity clusters. OSINT-enriched profiles surface social pattern data.',
+    stats: ['PROFILE SEARCH', 'RECIDIVISM SCORE', 'ZONE ACTIVITY'],
+    visual: 'osint',
+  },
+  {
+    id: '09', label: 'COMMAND ANALYTICS', title: 'Stats Dashboard',
+    color: '#D2FF00', icon: '📊',
+    desc: 'Executive view of system performance, alert resolution rates, zone response times, and AI prediction accuracy. Historical trend lines let commanders measure: is crime going up or down? Are we deploying faster?',
+    stats: ['TREND LINES', 'RESOLUTION RATE', 'AI ACCURACY'],
+    visual: 'stats',
+  },
+] as const
 
-// Inline intro copy — use plain ASCII apostrophes only (curly quotes break OXC parser)
-const INTRO_BLOCKS = [
-  {
-    eyebrow: 'THE PROBLEM',
-    heading: 'Crime does not wait for morning briefings.',
-    body: "Traditional policing reacts. Sentinel predicts. By the time an officer reads yesterday's report, the threat topology has shifted. Sentinel ingests live data and returns actionable intelligence in seconds, not hours.",
-  },
-  {
-    eyebrow: 'THE SYSTEM',
-    heading: 'Nine modules. One unified command layer.',
-    body: 'From spatial heatmaps to AI-generated tactical briefings, every Sentinel module shares the same real-time data backbone. Information flows in, intelligence flows out. No silos, no lag, no guesswork.',
-  },
-  {
-    eyebrow: 'THE TECHNOLOGY',
-    heading: 'Gemini AI + Linear Programming + LSTM.',
-    body: 'Sentinel pairs Google Gemini 1.5 Pro with classical operations research methods. AI handles language and context. Math handles optimisation. Together, they close the gap between raw data and field-ready decisions.',
-  },
-]
+// ─── SVG mock-visuals per module ───────────────────────────────────────────────
+function ModuleVisual({ type, color }: { type: string; color: string }) {
+  const c = color
+  switch (type) {
+    case 'anomaly': return (
+      <svg viewBox="0 0 320 220" fill="none" className="mod-svg">
+        <defs><filter id="glow-a"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+        {/* grid */}
+        {[0,1,2,3,4].map(i => <line key={i} x1={i*80} y1="0" x2={i*80} y2="220" stroke="rgba(255,255,255,0.04)" strokeWidth="1"/>)}
+        {[0,1,2,3].map(i => <line key={i} x1="0" y1={i*73} x2="320" y2={i*73} stroke="rgba(255,255,255,0.04)" strokeWidth="1"/>)}
+        {/* baseline */}
+        <polyline points="0,150 40,148 80,152 120,149 160,151 200,147 240,153 280,150 320,149" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" fill="none"/>
+        {/* anomaly spike */}
+        <polyline points="0,150 40,148 80,152 120,149 155,148 165,60 175,148 200,147 240,153 280,150 320,149" stroke={c} strokeWidth="2" fill="none" filter="url(#glow-a)"/>
+        {/* spike fill */}
+        <polygon points="155,148 165,60 175,148" fill={c} opacity="0.15"/>
+        {/* dot at peak */}
+        <circle cx="165" cy="60" r="5" fill={c} filter="url(#glow-a)"/>
+        <circle cx="165" cy="60" r="12" stroke={c} strokeWidth="1" fill="none" opacity="0.3"/>
+        {/* label */}
+        <text x="180" y="56" fill={c} fontSize="9" fontFamily="monospace" letterSpacing="2">ANOMALY DETECTED</text>
+        {/* threshold band */}
+        <rect x="0" y="110" width="320" height="20" fill={c} opacity="0.03"/>
+        <line x1="0" y1="110" x2="320" y2="110" stroke={c} strokeWidth="0.5" strokeDasharray="6 4" opacity="0.3"/>
+        <text x="4" y="107" fill={c} fontSize="8" fontFamily="monospace" opacity="0.5">THRESHOLD</text>
+        {/* zone labels */}
+        {['THANE','PUNE','MUMBAI','NAGPUR'].map((z,i) => (
+          <text key={z} x={i*80+8} y="215" fill="rgba(255,255,255,0.2)" fontSize="7" fontFamily="monospace">{z}</text>
+        ))}
+      </svg>
+    )
+    case 'heatmap': return (
+      <svg viewBox="0 0 320 220" fill="none" className="mod-svg">
+        {/* rough Maharashtra outline cells */}
+        {[
+          {x:60,y:40,w:50,h:40,v:0.9},{x:110,y:30,w:60,h:50,v:0.7},{x:170,y:20,w:55,h:45,v:0.4},
+          {x:40,y:80,w:55,h:40,v:0.5},{x:95,y:80,w:65,h:45,v:1.0},{x:160,y:65,w:60,h:50,v:0.6},{x:220,y:55,w:50,h:45,v:0.3},
+          {x:30,y:120,w:50,h:40,v:0.3},{x:80,y:125,w:60,h:40,v:0.7},{x:140,y:115,w:65,h:45,v:0.5},{x:205,y:100,w:55,h:50,v:0.8},{x:260,y:90,w:45,h:45,v:0.2},
+          {x:50,y:160,w:55,h:40,v:0.2},{x:105,y:165,w:60,h:38,v:0.4},{x:165,y:160,w:60,h:40,v:0.6},{x:225,y:148,w:50,h:45,v:0.9},
+        ].map((cell,i) => (
+          <rect key={i} x={cell.x} y={cell.y} width={cell.w} height={cell.h}
+            fill={c} opacity={cell.v * 0.6}
+            rx="2"
+          />
+        ))}
+        {/* grid overlay */}
+        {[0,1,2,3].map(i => <line key={i} x1="0" y1={i*55+20} x2="320" y2={i*55+20} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5"/>)}
+        {[0,1,2,3,4].map(i => <line key={i} x1={i*80} y1="0" x2={i*80} y2="220" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5"/>)}
+        {/* hotspot ring */}
+        <circle cx="127" cy="102" r="22" stroke={c} strokeWidth="1.5" fill="none" opacity="0.8"/>
+        <circle cx="127" cy="102" r="32" stroke={c} strokeWidth="0.5" fill="none" opacity="0.3"/>
+        <circle cx="127" cy="102" r="4" fill={c}/>
+        <text x="135" y="98" fill={c} fontSize="8" fontFamily="monospace" letterSpacing="1">CRITICAL</text>
+        <text x="135" y="108" fill="rgba(255,255,255,0.4)" fontSize="7" fontFamily="monospace">RISK 94</text>
+      </svg>
+    )
+    case 'neural': return (
+      <svg viewBox="0 0 320 220" fill="none" className="mod-svg">
+        <defs><filter id="glow-n"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+        {/* input layer */}
+        {[40,80,120,160,180].map((y,i) => (
+          <g key={i}>
+            <circle cx="40" cy={y} r="7" fill={c} opacity="0.7" filter="url(#glow-n)"/>
+            {/* connections to hidden */}
+            {[60,100,140,175].map((hy,j) => (
+              <line key={j} x1="47" y1={y} x2="153" y2={hy} stroke={c} strokeWidth="0.4" opacity="0.15"/>
+            ))}
+          </g>
+        ))}
+        {/* hidden layer */}
+        {[60,100,140,175].map((y,i) => (
+          <g key={i}>
+            <circle cx="160" cy={y} r="9" fill={c} opacity={i===1?1:0.5} filter={i===1?"url(#glow-n)":undefined}/>
+            {i===1 && <circle cx="160" cy={y} r="18" stroke={c} strokeWidth="0.5" fill="none" opacity="0.4"/>}
+            {/* connections to output */}
+            {[80,120,160].map((oy,j) => (
+              <line key={j} x1="169" y1={y} x2="263" y2={oy} stroke={c} strokeWidth="0.4" opacity="0.15"/>
+            ))}
+          </g>
+        ))}
+        {/* output layer */}
+        {[80,120,160].map((y,i) => (
+          <circle key={i} cx="270" cy={y} r="8" fill={c} opacity={[0.9,1,0.6][i]} filter="url(#glow-n)"/>
+        ))}
+        {/* score bar */}
+        <rect x="40" y="195" width="240" height="6" rx="3" fill="rgba(255,255,255,0.06)"/>
+        <rect x="40" y="195" width="192" height="6" rx="3" fill={c} opacity="0.8"/>
+        <text x="40" y="212" fill="rgba(255,255,255,0.4)" fontSize="7" fontFamily="monospace">RISK SCORE</text>
+        <text x="254" y="212" fill={c} fontSize="9" fontFamily="monospace" fontWeight="bold">80/100</text>
+      </svg>
+    )
+    case 'allocator': return (
+      <svg viewBox="0 0 320 220" fill="none" className="mod-svg">
+        {/* LP optimal bars */}
+        {[
+          {zone:'MUMBAI', alloc:90, x:20},{zone:'THANE', alloc:65, x:70},{zone:'PUNE', alloc:45, x:120},
+          {zone:'NAGPUR', alloc:78, x:170},{zone:'NASHIK', alloc:30, x:220},{zone:'AURANGABAD', alloc:55, x:270},
+        ].map((b) => (
+          <g key={b.zone}>
+            <rect x={b.x} y={190-b.alloc*1.6} width="36" height={b.alloc*1.6} fill={c} opacity="0.75" rx="2"/>
+            <rect x={b.x} y={190-b.alloc*1.6} width="36" height="2" fill={c} rx="1"/>
+            <text x={b.x+18} y="205" fill="rgba(255,255,255,0.3)" fontSize="6" fontFamily="monospace" textAnchor="middle">{b.zone.slice(0,3)}</text>
+            <text x={b.x+18} y={190-b.alloc*1.6-5} fill={c} fontSize="8" fontFamily="monospace" textAnchor="middle">{b.alloc}</text>
+          </g>
+        ))}
+        {/* axis */}
+        <line x1="15" y1="190" x2="315" y2="190" stroke="rgba(255,255,255,0.15)" strokeWidth="1"/>
+        <text x="15" y="14" fill="rgba(255,255,255,0.3)" fontSize="7" fontFamily="monospace">OPTIMAL FORCE ALLOCATION</text>
+      </svg>
+    )
+    case 'dispatch': return (
+      <svg viewBox="0 0 320 220" fill="none" className="mod-svg">
+        {/* kanban columns */}
+        {['PENDING','ACK','RESOLVED'].map((col, ci) => (
+          <g key={col}>
+            <rect x={ci*107+8} y="18" width="96" height="12" fill="rgba(255,255,255,0.04)" rx="2"/>
+            <text x={ci*107+56} y="28" fill="rgba(255,255,255,0.35)" fontSize="7" fontFamily="monospace" textAnchor="middle" letterSpacing="1">{col}</text>
+            {/* cards */}
+            {[0,1,2].map(ri => (
+              <g key={ri}>
+                <rect x={ci*107+8} y={38+ri*58} width="96" height="50" fill="rgba(255,255,255,0.03)" rx="3" stroke={ci===0&&ri===0?c:'rgba(255,255,255,0.06)'} strokeWidth={ci===0&&ri===0?1:0.5}/>
+                <rect x={ci*107+8} y={38+ri*58} width="4" height="50" fill={['#FF2D55','#FF9500','#34C759'][ci]} rx="1" opacity="0.8"/>
+                <text x={ci*107+18} y={54+ri*58} fill="rgba(255,255,255,0.6)" fontSize="6.5" fontFamily="monospace">ZONE {['THANE','PUNE','MUM','NGP','NAS','AUR','KOL','SAN','LAT'][ci*3+ri]}</text>
+                <text x={ci*107+18} y={64+ri*58} fill="rgba(255,255,255,0.25)" fontSize="6" fontFamily="monospace">MOBILE_PATROL</text>
+                <rect x={ci*107+18} y={71+ri*58} width="30" height="8" fill={['#FF2D55','#FF9500','#34C759'][ci]} rx="1" opacity="0.7"/>
+                <text x={ci*107+33} y={77+ri*58} fill="#000" fontSize="5.5" fontFamily="monospace" textAnchor="middle" fontWeight="bold">{['HIGH','CRIT','LOW'][ci]}</text>
+              </g>
+            ))}
+          </g>
+        ))}
+      </svg>
+    )
+    case 'stream': return (
+      <svg viewBox="0 0 320 220" fill="none" className="mod-svg">
+        {[
+          {t:'02:18:44',z:'THANE',s:'CRITICAL',msg:'Armed robbery reported — sector 4'},
+          {t:'02:17:31',z:'MUMBAI',s:'HIGH',msg:'Vehicle pursuit ongoing — NH48'},
+          {t:'02:16:22',z:'PUNE',s:'MEDIUM',msg:'Vandalism cluster — Camp area'},
+          {t:'02:15:09',z:'NAGPUR',s:'HIGH',msg:'Assault — Dharampeth'},
+          {t:'02:14:55',z:'NASHIK',s:'LOW',msg:'Suspicious activity near depot'},
+        ].map((ev, i) => (
+          <g key={i}>
+            <rect x="8" y={10+i*41} width="304" height="36" fill="rgba(255,255,255,0.02)" rx="3"
+              stroke={i===0?c:'rgba(255,255,255,0.05)'} strokeWidth={i===0?0.8:0.5}/>
+            <text x="18" y={24+i*41} fill="rgba(255,255,255,0.25)" fontSize="7" fontFamily="monospace">{ev.t}</text>
+            <text x="75" y={24+i*41} fill="rgba(255,255,255,0.5)" fontSize="7" fontFamily="monospace">{ev.z}</text>
+            <rect x="130" y={15+i*41} width="40" height="11" rx="2"
+              fill={ev.s==='CRITICAL'?'#FF2D55':ev.s==='HIGH'?'#FF9500':ev.s==='MEDIUM'?c:'#34C759'} opacity="0.15"/>
+            <text x="150" y={24+i*41} fontSize="6" fontFamily="monospace" textAnchor="middle" fontWeight="bold"
+              fill={ev.s==='CRITICAL'?'#FF2D55':ev.s==='HIGH'?'#FF9500':ev.s==='MEDIUM'?c:'#34C759'}>{ev.s}</text>
+            <text x="180" y={24+i*41} fill="rgba(255,255,255,0.4)" fontSize="7" fontFamily="monospace">{ev.msg.slice(0,28)}</text>
+            <line x1="18" y1={38+i*41} x2="300" y2={38+i*41} stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"/>
+          </g>
+        ))}
+      </svg>
+    )
+    case 'copilot': return (
+      <svg viewBox="0 0 320 220" fill="none" className="mod-svg">
+        {/* chat bubbles */}
+        <rect x="60" y="12" width="200" height="38" rx="4" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.08)" strokeWidth="0.5"/>
+        <text x="75" y="27" fill="rgba(255,255,255,0.6)" fontSize="7.5" fontFamily="monospace">What zones are critical right now?</text>
+        <text x="75" y="40" fill="rgba(255,255,255,0.3)" fontSize="6" fontFamily="monospace">— Commander Patil, 02:14</text>
 
+        <rect x="20" y="62" width="240" height="60" rx="4" fill={c} opacity="0.08" stroke={c} strokeWidth="0.5" opacity2="0.3"/>
+        <text x="35" y="78" fill={c} fontSize="7" fontFamily="monospace">SENTINEL COPILOT  ·  02:14:03</text>
+        <text x="35" y="93" fill="rgba(255,255,255,0.65)" fontSize="7" fontFamily="monospace">3 zones flagged CRITICAL: Thane Sector 4,</text>
+        <text x="35" y="105" fill="rgba(255,255,255,0.65)" fontSize="7" fontFamily="monospace">Mumbai Central, Nagpur East. Recommend</text>
+        <text x="35" y="117" fill="rgba(255,255,255,0.65)" fontSize="7" fontFamily="monospace">immediate deployment to Thane first.</text>
+
+        <rect x="80" y="138" width="180" height="28" rx="4" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.07)" strokeWidth="0.5"/>
+        <text x="95" y="154" fill="rgba(255,255,255,0.5)" fontSize="7" fontFamily="monospace">Deploy 4 units to Thane Sector 4.</text>
+
+        {/* typing indicator */}
+        <rect x="20" y="178" width="60" height="24" rx="4" fill={c} opacity="0.07" stroke={c} strokeWidth="0.4"/>
+        {[0,1,2].map(i => <circle key={i} cx={34+i*14} cy="190" r="3" fill={c} opacity={0.4+i*0.2}/>)}
+      </svg>
+    )
+    case 'osint': return (
+      <svg viewBox="0 0 320 220" fill="none" className="mod-svg">
+        {/* profile card */}
+        <rect x="20" y="10" width="130" height="180" rx="4" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.07)" strokeWidth="0.5"/>
+        <circle cx="85" cy="50" r="24" fill={c} opacity="0.15" stroke={c} strokeWidth="0.8"/>
+        <text x="85" y="55" fill={c} fontSize="18" textAnchor="middle">👤</text>
+        <rect x="35" y="85" width="90" height="6" rx="2" fill="rgba(255,255,255,0.2)"/>
+        <rect x="45" y="96" width="70" height="4" rx="2" fill="rgba(255,255,255,0.1)"/>
+        {['RECIDIVISM: HIGH','ZONE: THANE','ARRESTS: 7','STATUS: ACTIVE'].map((l,i) => (
+          <g key={i}>
+            <text x="35" y={115+i*16} fill="rgba(255,255,255,0.3)" fontSize="6.5" fontFamily="monospace">{l}</text>
+            <line x1="35" y1={118+i*16} x2="135" y2={118+i*16} stroke="rgba(255,255,255,0.05)" strokeWidth="0.5"/>
+          </g>
+        ))}
+        {/* connection graph */}
+        <circle cx="220" cy="80" r="10" fill={c} opacity="0.8"/>
+        {[[180,50],[260,50],[180,120],[260,120],[220,150]].map(([cx,cy],i) => (
+          <g key={i}>
+            <line x1="220" y1="80" x2={cx} y2={cy} stroke={c} strokeWidth="0.8" opacity="0.3"/>
+            <circle cx={cx} cy={cy} r="6" fill={c} opacity="0.4"/>
+          </g>
+        ))}
+        <text x="200" y="175" fill="rgba(255,255,255,0.25)" fontSize="7" fontFamily="monospace">NETWORK MAP</text>
+      </svg>
+    )
+    case 'stats': return (
+      <svg viewBox="0 0 320 220" fill="none" className="mod-svg">
+        {/* KPI row */}
+        {[
+          {label:'ALERTS RESOLVED',val:'94%'},{label:'AVG RESPONSE',val:'4.2m'},{label:'PREDICTION ACC.',val:'87%'}
+        ].map((kpi,i) => (
+          <g key={i}>
+            <rect x={i*108+8} y="8" width="96" height="44" rx="3" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.07)" strokeWidth="0.5"/>
+            <text x={i*108+56} y="28" fill={c} fontSize="14" fontFamily="monospace" textAnchor="middle" fontWeight="bold">{kpi.val}</text>
+            <text x={i*108+56} y="42" fill="rgba(255,255,255,0.3)" fontSize="6" fontFamily="monospace" textAnchor="middle" letterSpacing="0.5">{kpi.label}</text>
+          </g>
+        ))}
+        {/* trend line */}
+        <text x="8" y="75" fill="rgba(255,255,255,0.2)" fontSize="6.5" fontFamily="monospace" letterSpacing="1">7-DAY INCIDENT TREND</text>
+        <polyline
+          points="8,165 52,158 96,170 140,145 184,152 228,138 272,128 316,120"
+          stroke={c} strokeWidth="2" fill="none"/>
+        <polygon
+          points="8,165 52,158 96,170 140,145 184,152 228,138 272,128 316,120 316,200 8,200"
+          fill={c} opacity="0.06"/>
+        {/* axis */}
+        <line x1="8" y1="200" x2="316" y2="200" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5"/>
+        {['MON','TUE','WED','THU','FRI','SAT','SUN'].map((d,i) => (
+          <text key={d} x={8+i*51} y="212" fill="rgba(255,255,255,0.2)" fontSize="6.5" fontFamily="monospace">{d}</text>
+        ))}
+      </svg>
+    )
+    default: return (
+      <svg viewBox="0 0 320 220" fill="none" className="mod-svg">
+        <text x="160" y="110" fill={color} fontSize="40" textAnchor="middle">{type}</text>
+      </svg>
+    )
+  }
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
 export default function Landing() {
   const navigate = useNavigate()
-  const rootRef = useRef<HTMLDivElement>(null)
-  const cursorDotRef = useRef<HTMLDivElement>(null)
-  const cursorRingRef = useRef<HTMLDivElement>(null)
-  const heroRef = useRef<HTMLDivElement>(null)
-  const wordmarkRef = useRef<HTMLDivElement>(null)
+  const [bootDone, setBootDone] = useState(false)
+  const [loadPct, setLoadPct] = useState(0)
   const [typedTitle, setTypedTitle] = useState('')
   const [titleDone, setTitleDone] = useState(false)
-  const [glitch, setGlitch] = useState(false)
-  const [activeModule, setActiveModule] = useState(0)
-  const [bgColor, setBgColor] = useState('transparent')
-  const gsapRef = useRef<any>(null)
+  const [activeIdx, setActiveIdx] = useState(0)
+  const cursorDotRef = useRef<HTMLDivElement>(null)
+  const cursorRingRef = useRef<HTMLDivElement>(null)
 
-  // --- Typewriter ---
+  // ── Boot sequence ──────────────────────────────────────────────────────────
   useEffect(() => {
     const word = 'SENTINEL'
     let i = 0
-    const tick = () => {
+    const type = () => {
       setTypedTitle(word.slice(0, i + 1))
       i++
-      if (i < word.length) setTimeout(tick, 90)
-      else setTimeout(() => setTitleDone(true), 400)
+      if (i < word.length) setTimeout(type, 100)
+      else {
+        setTitleDone(true)
+        // animate loading bar
+        let pct = 0
+        const fill = () => {
+          pct += Math.random() * 12 + 4
+          if (pct >= 100) {
+            setLoadPct(100)
+            setTimeout(() => setBootDone(true), 500)
+          } else {
+            setLoadPct(pct)
+            setTimeout(fill, 60 + Math.random() * 80)
+          }
+        }
+        setTimeout(fill, 300)
+      }
     }
-    const t = setTimeout(tick, 600)
+    const t = setTimeout(type, 400)
     return () => clearTimeout(t)
   }, [])
 
-  // --- Glitch loop ---
-  useEffect(() => {
-    if (!titleDone) return
-    let timeout: ReturnType<typeof setTimeout>
-    const loop = () => {
-      setGlitch(true)
-      setTimeout(() => setGlitch(false), 180)
-      timeout = setTimeout(loop, 2800 + Math.random() * 3000)
-    }
-    timeout = setTimeout(loop, 1200)
-    return () => clearTimeout(timeout)
-  }, [titleDone])
-
-  // --- Magnetic cursor ---
+  // ── Magnetic cursor ────────────────────────────────────────────────────────
   useEffect(() => {
     const dot = cursorDotRef.current
     const ring = cursorRingRef.current
@@ -109,242 +363,215 @@ export default function Landing() {
       ring.style.transform = `translate(${rx}px,${ry}px) translate(-50%,-50%)`
       raf = requestAnimationFrame(tick)
     }
-    const onEnterMag = () => ring.classList.add('cursor-mag')
-    const onLeaveMag = () => ring.classList.remove('cursor-mag')
+    const onEnter = () => ring.classList.add('cursor-mag')
+    const onLeave = () => ring.classList.remove('cursor-mag')
     document.addEventListener('mousemove', onMove)
     document.querySelectorAll('button,a,[data-mag]').forEach(el => {
-      el.addEventListener('mouseenter', onEnterMag)
-      el.addEventListener('mouseleave', onLeaveMag)
+      el.addEventListener('mouseenter', onEnter)
+      el.addEventListener('mouseleave', onLeave)
     })
     raf = requestAnimationFrame(tick)
-    return () => {
-      document.removeEventListener('mousemove', onMove)
-      cancelAnimationFrame(raf)
-    }
-  }, [])
+    return () => { document.removeEventListener('mousemove', onMove); cancelAnimationFrame(raf) }
+  }, [bootDone])
 
-  // --- GSAP ScrollTrigger ---
+  // ── GSAP scroll-pinned sections ───────────────────────────────────────────
   useEffect(() => {
+    if (!bootDone) return
     let cleanup: (() => void) | undefined
-
-    const load = async () => {
+    const init = async () => {
       const gsap = (await import('gsap')).default
       const { ScrollTrigger } = await import('gsap/ScrollTrigger')
       gsap.registerPlugin(ScrollTrigger)
-      gsapRef.current = gsap
 
-      // Hero parallax layers
-      if (heroRef.current) {
-        const grid = heroRef.current.querySelector('.lp-hero-grid')
-        const inner = heroRef.current.querySelector('.lp-hero-inner')
-        const scrollCue = heroRef.current.querySelector('.lp-scroll-cue')
-        if (grid) gsap.to(grid, { yPercent: 30, ease: 'none', scrollTrigger: { trigger: heroRef.current, start: 'top top', end: 'bottom top', scrub: true } })
-        if (inner) gsap.to(inner, { yPercent: 20, opacity: 0, ease: 'none', scrollTrigger: { trigger: heroRef.current, start: 'top top', end: '80% top', scrub: true } })
-        if (scrollCue) gsap.to(scrollCue, { opacity: 0, ease: 'none', scrollTrigger: { trigger: heroRef.current, start: 'top top', end: '30% top', scrub: true } })
+      // Each .mod-section is pinned for the height of its scroll-space sibling
+      document.querySelectorAll('.mod-section').forEach((section, i) => {
+        const panel = section.querySelector('.mod-panel')
+        const visual = section.querySelector('.mod-visual-wrap')
+        const text = section.querySelector('.mod-text-wrap')
+
+        // reveal on enter
+        gsap.fromTo([visual, text],
+          { opacity: 0, y: 40 },
+          {
+            opacity: 1, y: 0, duration: 1, ease: 'expo.out', stagger: 0.15,
+            scrollTrigger: { trigger: section, start: 'top 80%', toggleActions: 'play none none none' }
+          }
+        )
+
+        // track active
+        ScrollTrigger.create({
+          trigger: section,
+          start: 'top 55%',
+          end: 'bottom 55%',
+          onEnter: () => setActiveIdx(i),
+          onEnterBack: () => setActiveIdx(i),
+        })
+      })
+
+      // hero fade on scroll
+      const hero = document.querySelector('.sl-hero')
+      if (hero) {
+        gsap.to(hero, {
+          opacity: 0, y: -60,
+          scrollTrigger: { trigger: hero, start: 'top top', end: '60% top', scrub: true }
+        })
       }
 
-      // Intro blocks — directional slide
-      document.querySelectorAll('.lp-intro-block').forEach((el, i) => {
-        gsap.fromTo(el,
-          { opacity: 0, x: i % 2 === 0 ? -60 : 60 },
-          { opacity: 1, x: 0, duration: 1, ease: 'expo.out', scrollTrigger: { trigger: el, start: 'top 80%', toggleActions: 'play none none none' } }
-        )
-      })
-
-      // Modules header
-      const mhdr = document.querySelector('.lp-modules-header')
-      if (mhdr) gsap.fromTo(mhdr, { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 1, ease: 'expo.out', scrollTrigger: { trigger: mhdr, start: 'top 85%', toggleActions: 'play none none none' } })
-
-      // Module rows — card from one side, text from opposite
-      document.querySelectorAll('.lp-module').forEach((section, i) => {
-        const card = section.querySelector('.lp-module-visual')
-        const text = section.querySelector('.lp-module-text')
-        const isLeft = section.classList.contains('lp-module-left')
-        const cardX = isLeft ? -80 : 80
-        const textX = isLeft ? 80 : -80
-
-        const tl = gsap.timeline({
-          scrollTrigger: {
-            trigger: section,
-            start: 'top 75%',
-            toggleActions: 'play none none none',
-            onEnter: () => { setActiveModule(i); setBgColor(MODULES[i]?.color ?? 'transparent') },
-          }
-        })
-        if (card) tl.fromTo(card, { opacity: 0, x: cardX }, { opacity: 1, x: 0, duration: 1.1, ease: 'expo.out' }, 0)
-        if (text) tl.fromTo(text, { opacity: 0, x: textX }, { opacity: 1, x: 0, duration: 1.1, ease: 'expo.out' }, 0.12)
-      })
-
-      // Scrub progress lines
-      document.querySelectorAll('.lp-module').forEach((section) => {
-        const line = section.querySelector('.lp-module-progress-fill')
-        if (!line) return
-        gsap.fromTo(line, { scaleX: 0 }, { scaleX: 1, ease: 'none', scrollTrigger: { trigger: section, start: 'top 70%', end: 'bottom 70%', scrub: 0.4 } })
-      })
-
-      // CTA
-      const cta = document.querySelector('.lp-cta')
-      if (cta) gsap.fromTo(cta, { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 1.2, ease: 'expo.out', scrollTrigger: { trigger: cta, start: 'top 85%', toggleActions: 'play none none none' } })
-
-      cleanup = () => { ScrollTrigger.getAll().forEach(st => st.kill()) }
+      cleanup = () => ScrollTrigger.getAll().forEach(st => st.kill())
     }
-
-    load()
+    init()
     return () => cleanup?.()
-  }, [])
+  }, [bootDone])
 
   const enterDash = () => navigate('/dashboard')
+  const activeColor = MODULES[activeIdx]?.color ?? '#D2FF00'
 
   return (
-    <div className="lp-root" ref={rootRef}>
-      {/* Cursor */}
-      <div ref={cursorDotRef} className="lp-cursor-dot" aria-hidden="true" />
-      <div ref={cursorRingRef} className="lp-cursor-ring" aria-hidden="true" />
+    <div className="sl-root">
+      {/* ── Custom cursor ── */}
+      <div ref={cursorDotRef} className="sl-cursor-dot" aria-hidden="true" />
+      <div ref={cursorRingRef} className="sl-cursor-ring" aria-hidden="true" />
 
-      {/* Ambient BG glow that shifts per module */}
-      <div className="lp-ambient" style={{'--ambient-color': bgColor} as React.CSSProperties} aria-hidden="true" />
+      {/* ── Grain ── */}
+      <div className="sl-grain" aria-hidden="true" />
 
-      {/* Grain + spine */}
-      <div className="lp-grain" aria-hidden="true" />
-      <div className="lp-spine" aria-hidden="true" />
+      {/* ── Ambient glow ── */}
+      <div className="sl-ambient" style={{ '--ambient': activeColor } as React.CSSProperties} aria-hidden="true" />
 
-      {/* Fixed module tracker dots */}
-      <nav className="lp-module-tracker" aria-label="Module navigation">
-        {MODULES.map((m, i) => (
-          <button
-            key={m.index}
-            className={`lp-tracker-dot ${i === activeModule ? 'active' : ''}`}
-            style={{'--dot-color': m.color} as React.CSSProperties}
-            onClick={() => document.getElementById(`mod-${m.index}`)?.scrollIntoView({behavior:'smooth'})}
-            aria-label={m.title}
-            title={m.title}
-          />
-        ))}
-      </nav>
-
-      {/* ── HERO ── */}
-      <section className="lp-hero" ref={heroRef}>
-        <div className="lp-hero-grid" aria-hidden="true" />
-        {(['tl','tr','bl','br'] as const).map(pos => (
-          <div key={pos} className={`lp-bracket lp-bracket-${pos}`} aria-hidden="true" />
-        ))}
-
-        <div className="lp-hero-inner">
-          <div className="lp-hero-eyebrow">MAHARASHTRA POLICE · AI OPERATIONS PLATFORM</div>
-          <div ref={wordmarkRef} className={`lp-hero-wordmark${glitch ? ' lp-glitch' : ''}`} data-text={typedTitle}>
+      {/* ─────────────────────────────────────────
+          BOOT SCREEN
+      ───────────────────────────────────────── */}
+      <div className={`sl-boot${bootDone ? ' sl-boot-done' : ''}`} aria-hidden={bootDone}>
+        <div className="sl-boot-inner">
+          <div className="sl-boot-eyebrow">MAHARASHTRA POLICE · AI OPERATIONS</div>
+          <div className="sl-boot-wordmark">
             {typedTitle}
-            {!titleDone && <span className="lp-cursor-blink">|</span>}
+            {!titleDone && <span className="sl-boot-caret" />}
           </div>
-          <div className="lp-hero-tagline">
-            PREDICTIVE CRIME INTELLIGENCE &amp; TACTICAL FORCE ALLOCATION
+          <div className="sl-boot-bar-wrap">
+            <div className="sl-boot-bar-track">
+              <div className="sl-boot-bar-fill" style={{ width: `${loadPct}%` }} />
+            </div>
+            <div className="sl-boot-bar-label">
+              {loadPct < 100 ? `LOADING SYSTEM... ${Math.floor(loadPct)}%` : 'SYSTEM ONLINE'}
+            </div>
           </div>
-          <div className="lp-hero-meta">
-            {([['9','OPERATIONAL MODULES'],['20+','ZONES MONITORED'],['RT','REAL-TIME INTEL']] as [string,string][]).map(([num, label], i) => (
-              <React.Fragment key={label}>
-                {i > 0 && <div className="lp-hero-meta-divider" />}
-                <div className="lp-hero-meta-item">
-                  <span className="lp-hero-meta-num">{num}</span>
-                  <span className="lp-hero-meta-label">{label}</span>
+        </div>
+      </div>
+
+      {/* ─────────────────────────────────────────
+          HERO (after boot)
+      ───────────────────────────────────────── */}
+      <section className="sl-hero">
+        <div className="sl-hero-grid" aria-hidden="true" />
+        <div className="sl-hero-inner">
+          <div className="sl-hero-eyebrow">MAHARASHTRA POLICE · AI OPERATIONS PLATFORM</div>
+          <h1 className="sl-hero-wordmark">SENTINEL</h1>
+          <p className="sl-hero-tagline">PREDICTIVE CRIME INTELLIGENCE &amp; TACTICAL FORCE ALLOCATION</p>
+          <div className="sl-hero-meta">
+            {([['9','MODULES'],['20+','ZONES'],['RT','REAL-TIME']] as [string,string][]).map(([n,l], i, arr) => (
+              <React.Fragment key={l}>
+                {i > 0 && <div className="sl-hero-meta-div" />}
+                <div className="sl-hero-meta-item">
+                  <span className="sl-hero-meta-num">{n}</span>
+                  <span className="sl-hero-meta-lbl">{l}</span>
                 </div>
               </React.Fragment>
             ))}
           </div>
-          <div className="lp-hero-actions">
-            <button className="lp-btn-primary" onClick={enterDash} data-mag>
-              <span>ENTER OPERATIONS CENTER</span>
-              <span className="lp-btn-arrow">→</span>
+          <div className="sl-hero-actions">
+            <button className="sl-btn-primary" onClick={enterDash} data-mag>
+              ENTER OPERATIONS CENTER <span>→</span>
             </button>
-            <button className="lp-btn-ghost" onClick={() => document.getElementById('intro-0')?.scrollIntoView({behavior:'smooth'})} data-mag>
-              LEARN MORE
+            <button className="sl-btn-ghost" onClick={() => document.querySelector('.mod-section')?.scrollIntoView({behavior:'smooth'})} data-mag>
+              EXPLORE SYSTEM
             </button>
           </div>
         </div>
-
-        <div className="lp-scroll-cue" onClick={() => document.getElementById('intro-0')?.scrollIntoView({behavior:'smooth'})}>
+        <div className="sl-hero-scroll-cue">
           <span>SCROLL</span>
-          <div className="lp-scroll-arrow" />
+          <div className="sl-hero-scroll-line" />
         </div>
       </section>
 
-      {/* ── INTRO BLOCKS ── */}
-      {INTRO_BLOCKS.map((block, i) => (
-        <section key={i} id={`intro-${i}`} className={`lp-intro-block lp-intro-${i % 2 === 0 ? 'left' : 'right'}`}>
-          <div className="lp-intro-eyebrow">{block.eyebrow}</div>
-          <h2 className="lp-intro-heading">{block.heading}</h2>
-          <p className="lp-intro-body">{block.body}</p>
-          <div className="lp-intro-rule" aria-hidden="true" />
-        </section>
-      ))}
-
-      {/* ── MODULES HEADER ── */}
-      <section className="lp-modules-header">
-        <div className="lp-modules-header-label">THE SYSTEM</div>
-        <h2 className="lp-modules-header-title">9 MODULES · LIVE</h2>
-        <div className="lp-modules-header-sub">Every capability Sentinel offers, explained below. Scroll through to see the full suite.</div>
-      </section>
-
-      {/* ── MODULE ROWS ── */}
-      {MODULES.map((mod) => (
-        <section
-          key={mod.index}
-          id={`mod-${mod.index}`}
-          className={`lp-module lp-module-${mod.side}`}
-          style={{'--mod-color': mod.color} as React.CSSProperties}
-        >
-          <div className="lp-module-progress">
-            <div className="lp-module-progress-fill" style={{background: mod.color}} />
-          </div>
-
-          <div className="lp-module-visual">
-            <div className="lp-module-card">
-              <div className="lp-module-card-shimmer" />
-              <div className="lp-module-card-glow" style={{background: mod.color}} />
-              <div className="lp-module-card-index">{mod.index}</div>
-              <div className="lp-module-card-icon">{mod.icon}</div>
-              <div className="lp-module-card-title" style={{color: mod.color}}>{mod.title}</div>
-              <div className="lp-module-card-label">{mod.label}</div>
-              <div className="lp-module-card-stats">
-                {mod.stats.map(s => (
-                  <span key={s} className="lp-module-card-stat" style={{borderColor:`${mod.color}44`, color: mod.color}}>{s}</span>
-                ))}
+      {/* ─────────────────────────────────────────
+          MODULE SECTIONS
+      ───────────────────────────────────────── */}
+      {MODULES.map((mod, i) => {
+        const isRight = i % 2 === 0 // visual on right for even idx, left for odd
+        return (
+          <section
+            key={mod.id}
+            className={`mod-section mod-section-${isRight ? 'right' : 'left'}`}
+            style={{ '--mod-color': mod.color } as React.CSSProperties}
+          >
+            <div className="mod-panel">
+              {/* Visual side */}
+              <div className={`mod-visual-wrap ${isRight ? 'mod-visual-right' : 'mod-visual-left'}`}>
+                <div className="mod-card">
+                  <div className="mod-card-glow" style={{ background: mod.color }} />
+                  <div className="mod-card-id">{mod.id}</div>
+                  <ModuleVisual type={mod.visual} color={mod.color} />
+                  <div className="mod-card-stats">
+                    {mod.stats.map(s => (
+                      <span key={s} className="mod-card-stat" style={{ borderColor: `${mod.color}55`, color: mod.color }}>{s}</span>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div className="lp-module-card-lines" aria-hidden="true">
-                <div className="lp-module-card-line" style={{background: mod.color}} />
-                <div className="lp-module-card-line lp-module-card-line-2" style={{background: mod.color}} />
+
+              {/* Text side */}
+              <div className={`mod-text-wrap ${isRight ? 'mod-text-left' : 'mod-text-right'}`}>
+                <div className="mod-text-id" style={{ color: mod.color }}>{mod.id}</div>
+                <div className="mod-text-label">{mod.label}</div>
+                <h2 className="mod-text-title">{mod.title}</h2>
+                <p className="mod-text-desc">{mod.desc}</p>
+                <div className="mod-text-tags">
+                  {mod.stats.map(s => (
+                    <span key={s} className="mod-text-tag">{s}</span>
+                  ))}
+                </div>
+                <div className="mod-text-line" style={{ background: mod.color }} />
               </div>
             </div>
-          </div>
+          </section>
+        )
+      })}
 
-          <div className="lp-module-text">
-            <div className="lp-module-text-num" style={{color: mod.color}}>{mod.index}</div>
-            <div className="lp-module-text-label">{mod.label}</div>
-            <h3 className="lp-module-text-title">{mod.title}</h3>
-            <p className="lp-module-text-desc">{mod.desc}</p>
-            <div className="lp-module-text-tags">
-              {mod.stats.map(s => (
-                <span key={s} className="lp-module-text-tag" style={{'--tag-color': mod.color} as React.CSSProperties}>{s}</span>
-              ))}
-            </div>
-          </div>
-        </section>
-      ))}
-
-      {/* ── CTA ── */}
-      <section className="lp-cta">
-        <div className="lp-cta-inner">
-          <div className="lp-cta-eyebrow">AUTHORIZED PERSONNEL ONLY</div>
-          <h2 className="lp-cta-title">Ready to enter the operations center?</h2>
-          <p className="lp-cta-body">Sentinel is a live system. Real data. Real decisions. Access requires valid credentials.</p>
-          <button className="lp-btn-primary lp-cta-btn" onClick={enterDash} data-mag>
-            ENTER SENTINEL <span className="lp-btn-arrow">→</span>
+      {/* ─────────────────────────────────────────
+          CTA
+      ───────────────────────────────────────── */}
+      <section className="sl-cta">
+        <div className="sl-cta-inner">
+          <div className="sl-cta-eyebrow">AUTHORIZED PERSONNEL ONLY</div>
+          <h2 className="sl-cta-title">Ready to enter the operations center?</h2>
+          <p className="sl-cta-body">Sentinel is a live system. Real data. Real decisions.</p>
+          <button className="sl-btn-primary" onClick={enterDash} data-mag>
+            ENTER SENTINEL <span>→</span>
           </button>
         </div>
-        <footer className="lp-footer">
+        <footer className="sl-footer">
           <span>SENTINEL · MAHARASHTRA POLICE AI OPERATIONS</span>
           <span>CLASSIFICATION: RESTRICTED</span>
           <span>© 2026 SENTINEL SYSTEMS</span>
         </footer>
       </section>
+
+      {/* ─────────────────────────────────────────
+          Side module index dots
+      ───────────────────────────────────────── */}
+      <nav className="sl-dots" aria-label="Module navigation">
+        {MODULES.map((m, i) => (
+          <button
+            key={m.id}
+            className={`sl-dot${i === activeIdx ? ' sl-dot-active' : ''}`}
+            style={{ '--dot-color': m.color } as React.CSSProperties}
+            onClick={() => document.querySelectorAll('.mod-section')[i]?.scrollIntoView({ behavior: 'smooth' })}
+            aria-label={m.title}
+            title={m.title}
+          />
+        ))}
+      </nav>
     </div>
   )
 }
