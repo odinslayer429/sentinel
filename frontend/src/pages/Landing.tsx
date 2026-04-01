@@ -1,273 +1,195 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion';
-import { AlertTriangle, Send, CheckCircle } from 'lucide-react';
-import axios from 'axios';
-import './Landing.css';
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import './Landing.css'
 
-/* ── Magnetic element wrapper ─────────────────────────────────────── */
-function Magnetic({ children, strength = 0.35 }: { children: React.ReactNode; strength?: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const sx = useSpring(x, { stiffness: 180, damping: 18 });
-  const sy = useSpring(y, { stiffness: 180, damping: 18 });
+const MODULES = [
+  { index:'01', label:'SPATIAL INTELLIGENCE', title:'Crime Heat Map', icon:'🗺', side:'left' as const, color:'#D2FF00',
+    desc:'A real-time Leaflet map overlaid with AI-generated danger scores across all 20+ zones of Maharashtra. Velocity-weighted heatmap clusters update every 60 seconds using predictive output, giving command staff a live spatial picture of where incidents are concentrating before they escalate.',
+    stats:['20+ ZONES','LIVE HEATMAP','VELOCITY WEIGHTED'] },
+  { index:'02', label:'LP OPTIMIZER', title:'Force Allocator', icon:'⚡', side:'right' as const, color:'#5AC8FA',
+    desc:'Linear programming meets AI briefing. The force allocator solves a constrained optimisation problem across available personnel and active threat zones, then uses Gemini to generate a plain-language tactical briefing in real time. Commanders get numbers and the reasoning behind them.',
+    stats:['LINEAR PROG.','GEMINI AI','LIVE BRIEFING'] },
+  { index:'03', label:'OPERATIONS CONTROL', title:'Dispatch Board', icon:'📡', side:'left' as const, color:'#FF9500',
+    desc:'A Kanban-style command board wired directly to the backend task queue. Pending alerts auto-create dispatch tasks. Officers can acknowledge, escalate, and resolve assignments in one click. Auto-refreshes every 15 seconds — zero manual reload required.',
+    stats:['KANBAN FLOW','15s REFRESH','ONE-CLICK ACK'] },
+  { index:'04', label:'LIVE FEED ANALYSIS', title:'Intel Stream', icon:'📶', side:'right' as const, color:'#FF2D55',
+    desc:'A real-time scrolling feed of all crime events, alerts, and system notifications ingested by Sentinel. Filterable by severity, zone, and time range. Supports delta polling — only new events since the last fetch are streamed, keeping bandwidth minimal even under high event volume.',
+    stats:['DELTA POLLING','SEVERITY FILTER','ZONE FILTER'] },
+  { index:'05', label:'AI ASSISTANT', title:'MahaCrime Copilot', icon:'🤖', side:'left' as const, color:'#BF5AF2',
+    desc:'A conversational AI powered by Gemini 1.5 Pro with full context of the current city crime state. Ask it anything — "What zones are critical right now?" or "Should I deploy more units to Thane?" — and get a grounded, data-backed response in natural language.',
+    stats:['GEMINI 1.5 PRO','CONTEXT-AWARE','NATURAL LANG.'] },
+  { index:'06', label:'ACOUSTIC PATTERN ANALYSIS', title:'Sonic Pulse Map', icon:'🔊', side:'right' as const, color:'#34C759',
+    desc:'Experimental module that cross-references reported incident density with simulated acoustic footprint data to identify areas of abnormal sound activity. Useful for crowded venues, festivals, and border zones where visual surveillance has blind spots.',
+    stats:['ACOUSTIC','CROWD ANALYSIS','BLIND SPOT COVER'] },
+  { index:'07', label:'PREDICTIVE ENGINE', title:'Risk Score Engine', icon:'🧠', side:'left' as const, color:'#FF6B35',
+    desc:'The statistical backbone of Sentinel. A multi-factor ML model scoring each zone 0–100 for predicted incident probability in the next 6 hours. Trained on historical Maharashtra Police records, time-of-day, day-of-week, and environmental factors. Powers the heatmap, force allocator, and AI copilot.',
+    stats:['ML SCORING','6-HOUR WINDOW','MULTI-FACTOR'] },
+  { index:'08', label:'OFFENDER REGISTRY', title:'OSINT Scanner', icon:'🔍', side:'right' as const, color:'#FF3B30',
+    desc:'Search and profile known offenders across Maharashtra database. Cross-references arrest records, recidivism scores, and zone activity clusters. OSINT-enriched profiles surface social pattern data to help investigators build connections between events, locations, and individuals.',
+    stats:['PROFILE SEARCH','RECIDIVISM SCORE','ZONE ACTIVITY'] },
+  { index:'09', label:'COMMAND ANALYTICS', title:'Stats Dashboard', icon:'📊', side:'left' as const, color:'#D2FF00',
+    desc:'A high-level executive view of system performance, alert resolution rates, zone response times, and AI prediction accuracy. Historical trend lines let commanders measure what matters: is crime going up or down? Are we deploying faster? Sentinel closes the feedback loop.',
+    stats:['TREND LINES','RESOLUTION RATE','AI ACCURACY'] },
+]
 
-  const handleMove = (e: React.MouseEvent) => {
-    const el = ref.current!;
-    const r  = el.getBoundingClientRect();
-    const cx = r.left + r.width  / 2;
-    const cy = r.top  + r.height / 2;
-    x.set((e.clientX - cx) * strength);
-    y.set((e.clientY - cy) * strength);
-  };
-  const reset = () => { x.set(0); y.set(0); };
+const INTRO_BLOCKS = [
+  { eyebrow:'THE PROBLEM', heading:'Crime does not wait for morning briefings.',
+    body:'Traditional policing reacts. Sentinel predicts. By the time an officer reads yesterday's report, the threat topology has shifted. Sentinel ingests live data and returns actionable intelligence in seconds, not hours.' },
+  { eyebrow:'THE SYSTEM', heading:'Nine modules. One unified command layer.',
+    body:'From spatial heatmaps to AI-generated tactical briefings, every Sentinel module shares the same real-time data backbone. Information flows in, intelligence flows out. No silos, no lag, no guesswork.' },
+  { eyebrow:'THE TECHNOLOGY', heading:'Gemini AI + Linear Programming + LSTM.',
+    body:'Sentinel pairs Google Gemini 1.5 Pro with classical operations research methods. AI handles language and context. Math handles optimisation. Together, they close the gap between raw data and field-ready decisions.' },
+]
 
-  return (
-    <motion.div ref={ref} style={{ x: sx, y: sy }}
-      onMouseMove={handleMove} onMouseLeave={reset}>
-      {children}
-    </motion.div>
-  );
-}
-
-/* ── Custom cursor ────────────────────────────────────────────────── */
-function Cursor() {
-  const ox = useMotionValue(-100);
-  const oy = useMotionValue(-100);
-  const dx = useMotionValue(-100);
-  const dy = useMotionValue(-100);
-  const sox = useSpring(ox, { stiffness: 90,  damping: 16 });
-  const soy = useSpring(oy, { stiffness: 90,  damping: 16 });
-  const sdx = useSpring(dx, { stiffness: 200, damping: 20 });
-  const sdy = useSpring(dy, { stiffness: 200, damping: 20 });
+export default function Landing() {
+  const navigate = useNavigate()
+  const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set())
+  const [glitch, setGlitch] = useState(false)
+  const [titleDone, setTitleDone] = useState(false)
+  const [typedTitle, setTypedTitle] = useState('')
+  const observerRef = useRef<IntersectionObserver | null>(null)
 
   useEffect(() => {
-    const move = (e: MouseEvent) => { ox.set(e.clientX); oy.set(e.clientY); dx.set(e.clientX); dy.set(e.clientY); };
-    const over = (e: MouseEvent) => {
-      const t = e.target as HTMLElement;
-      if (t.closest('button,a,[data-magnetic]')) {
-        document.body.classList.add('cursor-hovering-btn');
-        document.body.classList.add('cursor-hover');
-      } else if (t.closest('.brutal-card,.stat-pill,.hub-tile')) {
-        document.body.classList.add('cursor-hover');
-        document.body.classList.remove('cursor-hovering-btn');
-      } else {
-        document.body.classList.remove('cursor-hover');
-        document.body.classList.remove('cursor-hovering-btn');
-      }
-    };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseover', over);
-    return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseover', over); };
-  }, []);
+    const word = 'SENTINEL'
+    let i = 0
+    const tick = () => {
+      setTypedTitle(word.slice(0, i + 1))
+      i++
+      if (i < word.length) setTimeout(tick, 90)
+      else setTimeout(() => setTitleDone(true), 400)
+    }
+    const t = setTimeout(tick, 600)
+    return () => clearTimeout(t)
+  }, [])
 
-  return (
-    <>
-      <motion.div className="cursor-outer" style={{ left: sox, top: soy }} />
-      <motion.div className="cursor-dot"   style={{ left: sdx, top: sdy }} />
-    </>
-  );
-}
-
-/* ── Counter animation ────────────────────────────────────────────── */
-function CountUp({ to, duration = 1600 }: { to: number; duration?: number }) {
-  const [val, setVal] = useState(0);
   useEffect(() => {
-    const start = performance.now();
-    const tick = (now: number) => {
-      const p = Math.min((now - start) / duration, 1);
-      const ease = 1 - Math.pow(1 - p, 4);
-      setVal(Math.round(ease * to));
-      if (p < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }, [to, duration]);
-  return <>{val.toLocaleString()}</>;
-}
+    if (!titleDone) return
+    const loop = () => { setGlitch(true); setTimeout(() => setGlitch(false), 180); setTimeout(loop, 2800 + Math.random() * 3000) }
+    const t = setTimeout(loop, 1200)
+    return () => clearTimeout(t)
+  }, [titleDone])
 
-/* ── Page variants ────────────────────────────────────────────────── */
-const pageVars = {
-  hidden:  { opacity: 0, filter: 'blur(12px)', scale: 1.03 },
-  visible: { opacity: 1, filter: 'blur(0px)',  scale: 1, transition: { duration: 0.85, ease: [0.16,1,0.3,1] } },
-  exit:    { opacity: 0, filter: 'blur(8px)',  scale: 0.98, transition: { duration: 0.4,  ease: [0.16,1,0.3,1] } },
-};
-const leftVars = {
-  hidden:  { opacity:0, x:-60 },
-  visible: { opacity:1, x:0, transition:{ duration:0.95, ease:[0.16,1,0.3,1] } },
-};
-const rightVars = {
-  hidden:  { opacity:0, y:50, scale:0.96 },
-  visible: { opacity:1, y:0, scale:1, transition:{ duration:0.9, delay:0.15, ease:[0.16,1,0.3,1] } },
-};
-const statVars = {
-  hidden:  { opacity:0, x:-20 },
-  visible: (i:number) => ({ opacity:1, x:0, transition:{ duration:0.6, delay:0.5+i*0.12, ease:[0.16,1,0.3,1] } }),
-};
+  useEffect(() => {
+    observerRef.current = new IntersectionObserver(
+      (entries) => { entries.forEach(e => { if (e.isIntersecting) setVisibleSections(prev => new Set([...prev, e.target.id])) }) },
+      { threshold: 0.12, rootMargin: '0px 0px -60px 0px' }
+    )
+    document.querySelectorAll('[data-reveal]').forEach(el => observerRef.current!.observe(el))
+    return () => observerRef.current?.disconnect()
+  }, [])
 
-/* ── Landing ─────────────────────────────────────────────────────── */
-const Landing = () => {
-  const [tipDetails, setTipDetails] = useState('');
-  const [zoneId, setZoneId]         = useState('');
-  const [success, setSuccess]       = useState(false);
-  const [loading, setLoading]       = useState(false);
-  const [mounted, setMounted]       = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      await axios.post('/api/public/tip', {
-        details: tipDetails, severity: 'CRITICAL', zone_id: zoneId || 'Z_S_1',
-      });
-      setSuccess(true); setTipDetails(''); setZoneId('');
-      setTimeout(() => setSuccess(false), 5000);
-    } catch (err) { console.error('Tip submission failed', err); }
-    finally { setLoading(false); }
-  };
-
-  const stats = [
-    { num: 20,   suffix: '',  label: 'ACTIVE ZONES' },
-    { num: 1975, suffix: '',  label: 'EVENTS TRACKED' },
-    { num: 97,   suffix: '%', label: 'MODEL ACCURACY' },
-  ];
+  const vis = (id: string) => visibleSections.has(id)
 
   return (
-    <>
-      {/* Grain + Cursor */}
-      <div className="grain-layer" aria-hidden />
-      <Cursor />
+    <div className="lp-root">
+      <div className="lp-grain" aria-hidden="true" />
+      <div className="lp-spine" aria-hidden="true" />
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key="landing"
-          className="landing-container"
-          variants={pageVars}
-          initial="hidden"
-          animate="visible"
-          exit="exit"
-        >
-          {/* Header */}
-          <header className="lnd-header">
-            <motion.div className="lnd-wordmark"
-              initial={{ opacity:0, y:-12 }} animate={{ opacity:1, y:0 }}
-              transition={{ duration:0.6, ease:[0.16,1,0.3,1] }}>
-              SENT<em>I</em>NEL
-            </motion.div>
-            <motion.div className="lnd-status"
-              initial={{ opacity:0 }} animate={{ opacity:1 }}
-              transition={{ delay:0.4, duration:0.5 }}>
-              <span className="lnd-pulse" />
-              SYSTEM LIVE — MUMBAI
-            </motion.div>
-          </header>
+      {/* HERO */}
+      <section className="lp-hero">
+        <div className="lp-hero-grid" aria-hidden="true" />
+        <div className="lp-bracket lp-bracket-tl" aria-hidden="true" />
+        <div className="lp-bracket lp-bracket-tr" aria-hidden="true" />
+        <div className="lp-bracket lp-bracket-bl" aria-hidden="true" />
+        <div className="lp-bracket lp-bracket-br" aria-hidden="true" />
+        <div className="lp-hero-inner">
+          <div className="lp-hero-eyebrow">MAHARASHTRA POLICE · AI OPERATIONS PLATFORM</div>
+          <div className={`lp-hero-wordmark ${glitch ? 'lp-glitch' : ''}`} data-text={typedTitle}>
+            {typedTitle}
+            {!titleDone && <span className="lp-cursor">|</span>}
+          </div>
+          <div className="lp-hero-tagline">PREDICTIVE CRIME INTELLIGENCE &amp; TACTICAL FORCE ALLOCATION</div>
+          <div className="lp-hero-meta">
+            <div className="lp-hero-meta-item"><span className="lp-hero-meta-num">9</span><span className="lp-hero-meta-label">OPERATIONAL MODULES</span></div>
+            <div className="lp-hero-meta-divider" />
+            <div className="lp-hero-meta-item"><span className="lp-hero-meta-num">20+</span><span className="lp-hero-meta-label">ZONES MONITORED</span></div>
+            <div className="lp-hero-meta-divider" />
+            <div className="lp-hero-meta-item"><span className="lp-hero-meta-num">RT</span><span className="lp-hero-meta-label">REAL-TIME INTEL</span></div>
+          </div>
+          <div className="lp-hero-actions">
+            <button className="lp-btn-primary" onClick={() => navigate('/dashboard')}>
+              ENTER OPERATIONS CENTER <span className="lp-btn-arrow">→</span>
+            </button>
+            <button className="lp-btn-ghost" onClick={() => document.getElementById('intro-0')?.scrollIntoView({behavior:'smooth'})}>
+              LEARN MORE
+            </button>
+          </div>
+        </div>
+        <div className="lp-scroll-cue" onClick={() => document.getElementById('intro-0')?.scrollIntoView({behavior:'smooth'})}>
+          <span>SCROLL</span>
+          <div className="lp-scroll-arrow" />
+        </div>
+      </section>
 
-          {/* Left: Hero */}
-          <motion.div className="splash-zone"
-            variants={leftVars} initial="hidden" animate="visible">
+      {/* INTRO BLOCKS */}
+      {INTRO_BLOCKS.map((block, i) => (
+        <section key={i} id={`intro-${i}`} data-reveal
+          className={`lp-intro-block lp-intro-${i%2===0?'left':'right'} ${vis(`intro-${i}`)?'lp-in':''}`}>
+          <div className="lp-intro-eyebrow">{block.eyebrow}</div>
+          <h2 className="lp-intro-heading">{block.heading}</h2>
+          <p className="lp-intro-body">{block.body}</p>
+          <div className="lp-intro-rule" aria-hidden="true" />
+        </section>
+      ))}
 
-            <h1 className="giant-text">
-              ZERO <span className="neon-highlight">GAPS.</span><br />
-              REAL-TIME <span className="neon-highlight">INTEL.</span>
-            </h1>
+      {/* MODULES HEADER */}
+      <section id="modules-header" data-reveal className={`lp-modules-header ${vis('modules-header')?'lp-in':''}`}>
+        <div className="lp-modules-header-label">THE SYSTEM</div>
+        <h2 className="lp-modules-header-title">9 MODULES · LIVE</h2>
+        <div className="lp-modules-header-sub">Every capability Sentinel offers, explained below. Scroll through to see the full suite.</div>
+      </section>
 
-            <motion.p className="sub-text"
-              initial={{ opacity:0 }} animate={{ opacity:1 }}
-              transition={{ delay:0.7, duration:0.7, ease:[0.16,1,0.3,1] }}>
-              THE APEX PREDICTIVE POLICING ENGINE.<br />
-              BUILT FOR MUMBAI. DESIGNED FOR VELOCITY.
-            </motion.p>
-
-            <div className="splash-stats">
-              {stats.map((s, i) => (
-                <motion.div key={s.label} className="stat-pill"
-                  variants={statVars} custom={i} initial="hidden" animate="visible">
-                  <span className="stat-num">
-                    {mounted ? <CountUp to={s.num} duration={1400 + i * 200} /> : '0'}{s.suffix}
-                  </span>
-                  <span className="stat-label">{s.label}</span>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Right: Glass form */}
-          <motion.div className="form-zone"
-            variants={rightVars} initial="hidden" animate="visible">
-            <Magnetic strength={0.15}>
-              <div className="brutal-card tip-card">
-                <div className="card-header">
-                  <AlertTriangle className="alert-icon" size={28} />
-                  <h2>ANONYMOUS TIP INTAKE</h2>
+      {/* MODULE ROWS */}
+      {MODULES.map((mod) => {
+        const id = `mod-${mod.index}`
+        return (
+          <section key={mod.index} id={id} data-reveal
+            className={`lp-module lp-module-${mod.side} ${vis(id)?'lp-in':''}`}>
+            <div className="lp-module-visual">
+              <div className="lp-module-card" style={{'--mod-color':mod.color} as React.CSSProperties}>
+                <div className="lp-module-card-shimmer" />
+                <div className="lp-module-card-index">{mod.index}</div>
+                <div className="lp-module-card-icon">{mod.icon}</div>
+                <div className="lp-module-card-title" style={{color:mod.color}}>{mod.title}</div>
+                <div className="lp-module-card-label">{mod.label}</div>
+                <div className="lp-module-card-stats">
+                  {mod.stats.map(s => (<span key={s} className="lp-module-card-stat" style={{borderColor:`${mod.color}44`,color:mod.color}}>{s}</span>))}
                 </div>
-
-                <AnimatePresence mode="wait">
-                  {success ? (
-                    <motion.div key="success" className="success-state"
-                      initial={{ opacity:0, scale:0.92, y:10 }}
-                      animate={{ opacity:1, scale:1,    y:0  }}
-                      exit   ={{ opacity:0, scale:0.95       }}
-                      transition={{ duration:0.45, ease:[0.16,1,0.3,1] }}>
-                      <motion.div
-                        initial={{ scale:0, rotate:-30 }}
-                        animate={{ scale:1, rotate:0   }}
-                        transition={{ type:'spring', stiffness:300, damping:20, delay:0.1 }}>
-                        <CheckCircle size={56} className="success-icon" />
-                      </motion.div>
-                      <h3>INTEL RECEIVED.</h3>
-                      <p>SIGNAL SECURED AND ROUTED TO COMMAND CENTER.</p>
-                    </motion.div>
-                  ) : (
-                    <motion.form key="form" className="tip-form"
-                      onSubmit={handleSubmit}
-                      initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
-                      exit   ={{ opacity:0, y:-8 }}
-                      transition={{ duration:0.35, ease:[0.16,1,0.3,1] }}>
-
-                      <div className="input-group">
-                        <label htmlFor="tip-details">INCIDENT DETAILS (ANONYMOUS)</label>
-                        <textarea id="tip-details" className="brutal-input brutal-textarea"
-                          placeholder="Describe the incident..."
-                          value={tipDetails}
-                          onChange={e => setTipDetails(e.target.value)}
-                          required rows={4} />
-                      </div>
-
-                      <div className="input-group">
-                        <label htmlFor="zone-select">LOCATION / ZONE</label>
-                        <select id="zone-select" className="brutal-input"
-                          value={zoneId} onChange={e => setZoneId(e.target.value)} required>
-                          <option value="" disabled>SELECT A ZONE...</option>
-                          <option value="Z_S_1">Z_S_1 — Colaba / Nariman Point</option>
-                          <option value="Z_S_2">Z_S_2 — Byculla / Parel</option>
-                          <option value="Z_W_1">Z_W_1 — Bandra / Khar</option>
-                          <option value="Z_W_2">Z_W_2 — Andheri / Juhu</option>
-                          <option value="Z_E_1">Z_E_1 — Kurla / Chembur</option>
-                        </select>
-                      </div>
-
-                      <Magnetic strength={0.2}>
-                        <button type="submit" className="brutal-btn submit-btn" disabled={loading}>
-                          <Send size={16} />
-                          {loading ? 'TRANSMITTING...' : 'TRANSMIT INTEL'}
-                        </button>
-                      </Magnetic>
-                    </motion.form>
-                  )}
-                </AnimatePresence>
+                <div className="lp-module-card-lines" aria-hidden="true">
+                  <div className="lp-module-card-line" style={{background:mod.color}} />
+                  <div className="lp-module-card-line lp-module-card-line-2" style={{background:mod.color}} />
+                </div>
               </div>
-            </Magnetic>
-          </motion.div>
+            </div>
+            <div className="lp-module-text">
+              <div className="lp-module-text-num" style={{color:mod.color}}>{mod.index}</div>
+              <div className="lp-module-text-label">{mod.label}</div>
+              <h3 className="lp-module-text-title">{mod.title}</h3>
+              <p className="lp-module-text-desc">{mod.desc}</p>
+              <div className="lp-module-text-tags">
+                {mod.stats.map(s => (<span key={s} className="lp-module-text-tag" style={{'--tag-color':mod.color} as React.CSSProperties}>{s}</span>))}
+              </div>
+            </div>
+          </section>
+        )
+      })}
 
-          {/* Footer */}
-          <footer className="lnd-footer">
-            <span>SENTINEL © 2026 — PREDICTIVE CRIME ANALYTICS</span>
-            <span>MUMBAI METRO REGION // v3.0</span>
-          </footer>
-        </motion.div>
-      </AnimatePresence>
-    </>
-  );
-};
-
-export default Landing;
+      {/* CTA */}
+      <section id="lp-cta" data-reveal className={`lp-cta ${vis('lp-cta')?'lp-in':''}`}>
+        <div className="lp-cta-inner">
+          <div className="lp-cta-eyebrow">AUTHORIZED PERSONNEL ONLY</div>
+          <h2 className="lp-cta-title">Ready to enter the operations center?</h2>
+          <p className="lp-cta-body">Sentinel is a live system. Real data. Real decisions. Access requires valid credentials.</p>
+          <button className="lp-btn-primary lp-cta-btn" onClick={() => navigate('/dashboard')}>
+            ENTER SENTINEL <span className="lp-btn-arrow">→</span>
+          </button>
+        </div>
+        <footer className="lp-footer">
+          <span>SENTINEL · MAHARASHTRA POLICE AI OPERATIONS</span>
+          <span>CLASSIFICATION: RESTRICTED</span>
+          <span>© 2026 SENTINEL SYSTEMS</span>
+        </footer>
+      </section>
+    </div>
+  )
+}
