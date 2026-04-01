@@ -296,32 +296,33 @@
 @media (max-width:768px) { .sl-dots { display:none; } }
 
 /* ═══════════════════════════════════════════
-   MODULE SECTIONS  — strict 50/50 split
-   LEFT HALF  = visual panel (dark bg, fills full height)
-   RIGHT HALF = info text (padded, centred vertically)
+   MODULE SECTIONS
+   TRUE 50/50: visual half bleeds ALL the way
+   to the page edge — no card, no padding box.
+   Info half is centred text in the other 50%.
 ═══════════════════════════════════════════ */
 .mod-section {
-  /* full-viewport row split into two equal columns */
   min-height: 100svh;
   display: grid;
-  grid-template-columns: 1fr 1fr; /* ← this is the 50/50 */
+  grid-template-columns: 1fr 1fr;
   position: relative;
   overflow: hidden;
 }
 
-/* ── Visual half ────────────────────────── */
+/* ── Visual half — fills its cell edge-to-edge ── */
 .mod-visual-half {
-  /* fills its grid cell completely */
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  /* slightly darker than page bg to frame the visual */
+  /* slightly darker panel — no extra card box */
   background: #07070b;
   border-right: 1px solid rgba(255,255,255,0.06);
-  min-height: 100svh;
-  padding: 3rem 2.5rem;
+  /* NO padding on the outer edges — visual bleeds to cell boundary */
+  padding: 3rem 3rem;
   overflow: hidden;
+  /* stretch to fill full height of the row */
+  align-self: stretch;
 }
 
 /* flip: visual on right for alternating rows */
@@ -334,11 +335,11 @@
   order: 1;
 }
 
-/* inner glow blob behind the visual */
+/* accent glow behind the visual */
 .mod-visual-half::before {
   content: '';
   position: absolute;
-  width: 60%; height: 50%;
+  width: 70%; height: 60%;
   background: radial-gradient(circle, var(--mod-color, #D2FF00) 0%, transparent 70%);
   opacity: 0.07;
   pointer-events: none;
@@ -346,12 +347,55 @@
   transition: opacity .4s;
 }
 
-/* ── Info half ─────────────────────────── */
+/* ── The card/svg fills the visual half ── */
+.mod-card {
+  /* take up the full available space in the visual half */
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.25rem;
+  position: relative;
+  /* no max-width constraint — let it fill */
+}
+
+.mod-card-id {
+  font-size: 0.5rem;
+  letter-spacing: 0.3em;
+  color: rgba(255,255,255,0.2);
+  font-weight: 700;
+}
+
+.mod-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  /* let the SVG grow to fill the card */
+  flex: 1;
+}
+
+.mod-card-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.mod-card-stat {
+  font-size: 0.45rem;
+  letter-spacing: 0.15em;
+  padding: 3px 10px;
+  border: 1px solid;
+  border-radius: 2px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.02);
+}
+
+/* ── Info half ── */
 .mod-info-half {
   display: flex;
   align-items: center;
   padding: 4rem 4rem 4rem 5rem;
-  min-height: 100svh;
+  align-self: stretch;
 }
 .mod-section-flip .mod-info-half {
   padding: 4rem 5rem 4rem 4rem;
@@ -364,7 +408,6 @@
   gap: 1rem;
 }
 
-/* eyebrow: "NOW AVAILABLE" style label */
 .mod-info-eyebrow {
   font-size: 0.6rem;
   letter-spacing: 0.35em;
@@ -413,40 +456,6 @@
   margin-top: 0.5rem;
 }
 
-/* ── Visual card inside the visual half ── */
-.mod-card {
-  width: 100%;
-  max-width: 440px;
-  position: relative;
-}
-.mod-card-id {
-  font-size: 0.5rem;
-  letter-spacing: 0.3em;
-  color: rgba(255,255,255,0.2);
-  font-weight: 700;
-  margin-bottom: 0.75rem;
-}
-.mod-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-.mod-card-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 1rem;
-}
-.mod-card-stat {
-  font-size: 0.45rem;
-  letter-spacing: 0.15em;
-  padding: 3px 10px;
-  border: 1px solid;
-  border-radius: 2px;
-  font-weight: 700;
-  background: rgba(255,255,255,0.02);
-}
-
 /* ═══════════════════════════════════════════
    CTA
 ═══════════════════════════════════════════ */
@@ -490,13 +499,14 @@
     min-height: unset;
   }
   .mod-visual-half {
-    min-height: 55vw;
+    min-height: 60vw;
     border-right: none;
     border-bottom: 1px solid rgba(255,255,255,0.06);
+    align-self: auto;
   }
   .mod-section-flip .mod-visual-half { order: unset; border-left: none; border-bottom: 1px solid rgba(255,255,255,0.06); }
   .mod-section-flip .mod-info-half   { order: unset; }
-  .mod-info-half { padding: 3rem 1.5rem; min-height: unset; }
+  .mod-info-half { padding: 3rem 1.5rem; min-height: unset; align-self: auto; }
   .mod-section-flip .mod-info-half { padding: 3rem 1.5rem; }
   .sl-hero-meta    { flex-wrap:wrap; gap:1rem; padding:1rem; }
   .sl-hero-actions { flex-direction:column; }
