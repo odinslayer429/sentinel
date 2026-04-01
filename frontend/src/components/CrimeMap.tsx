@@ -24,10 +24,10 @@ interface Zone {
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 function riskColor(score: number) {
-  if (score >= 1.5) return '#FF3B30';
-  if (score >= 1.0) return '#FF9500';
-  if (score >= 0.5) return '#FFD60A';
-  return '#D2FF00';
+  if (score >= 1.5) return '#c0392b';
+  if (score >= 1.0) return '#c87000';
+  if (score >= 0.5) return '#b8860b';
+  return '#1a7a00';
 }
 function riskLabel(score: number) {
   if (score >= 1.5) return 'CRITICAL';
@@ -54,38 +54,23 @@ function makePolygon(zone: Zone): GeoJSON.Feature {
   };
 }
 function mlRiskColor(level: string) {
-  if (level === 'HIGH')   return '#FF3B30';
-  if (level === 'MEDIUM') return '#FF9500';
-  return '#D2FF00';
+  if (level === 'HIGH')   return '#c0392b';
+  if (level === 'MEDIUM') return '#c87000';
+  return '#1a7a00';
 }
 
 /* ─── invalidateSize fixer ───────────────────────────────────── */
-/**
- * Calls map.invalidateSize() after mount (rAF + 250 ms fallback) and
- * whenever the map container is resized (ResizeObserver).
- * Fixes the grey-tile / clipped-tile bug that happens when a map
- * renders inside a CSS transition or a hidden-then-revealed container.
- */
 function MapResizeFixer() {
   const map = useMap();
-
   useEffect(() => {
-    // immediate rAF pass — catches most cases
     const raf = requestAnimationFrame(() => map.invalidateSize());
-    // 250 ms safety net — catches framer-motion fade-in delay
     const t1  = setTimeout(() => map.invalidateSize(), 250);
-    // 600 ms belt-and-braces — catches slow renders
     const t2  = setTimeout(() => map.invalidateSize(), 600);
-
-    // ResizeObserver — reacts to any future container size change
-    // (panel open/close, sidebar collapse, window resize)
-    const container = map.getContainer();
     let ro: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(() => map.invalidateSize());
-      ro.observe(container);
+      ro.observe(map.getContainer());
     }
-
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(t1);
@@ -93,7 +78,6 @@ function MapResizeFixer() {
       ro?.disconnect();
     };
   }, [map]);
-
   return null;
 }
 
@@ -102,12 +86,10 @@ function MLPulseRings({ zones }: { zones: Zone[] }) {
   const map = useMap();
   const layersRef = useRef<any[]>([]);
   const frameRef  = useRef<number>(0);
-
   useEffect(() => {
     const L = (window as any).L;
     layersRef.current.forEach(l => map.removeLayer(l));
     layersRef.current = [];
-
     zones.forEach(zone => {
       const intensity = zone.hawkes_intensity ?? 0;
       if (intensity <= 0) return;
@@ -119,7 +101,6 @@ function MLPulseRings({ zones }: { zones: Zone[] }) {
       }).addTo(map);
       layersRef.current.push(ring);
     });
-
     const start = performance.now();
     function animate(ts: number) {
       const t = (ts - start) / 1000;
@@ -135,7 +116,6 @@ function MLPulseRings({ zones }: { zones: Zone[] }) {
       layersRef.current.forEach(l => map.removeLayer(l));
     };
   }, [zones, map]);
-
   return null;
 }
 
@@ -144,29 +124,32 @@ function Legend() {
   return (
     <div style={{
       position: 'absolute', bottom: 24, left: 12, zIndex: 1000,
-      background: 'rgba(0,0,0,0.85)', border: '1px solid #333',
-      padding: '10px 14px', fontFamily: 'Space Mono, monospace', fontSize: '10px',
+      background: 'rgba(255,255,255,0.95)',
+      border: '1px solid rgba(0,0,0,0.12)',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+      padding: '10px 14px',
+      fontFamily: 'Space Mono, monospace', fontSize: '10px',
     }}>
       {[
-        { color: '#FF3B30', label: 'CRITICAL  ≥1.5' },
-        { color: '#FF9500', label: 'HIGH      ≥1.0' },
-        { color: '#FFD60A', label: 'ELEVATED  ≥0.5' },
-        { color: '#D2FF00', label: 'NOMINAL   <0.5' },
+        { color: '#c0392b', label: 'CRITICAL  ≥1.5' },
+        { color: '#c87000', label: 'HIGH      ≥1.0' },
+        { color: '#b8860b', label: 'ELEVATED  ≥0.5' },
+        { color: '#1a7a00', label: 'NOMINAL   <0.5' },
       ].map(({ color, label }) => (
         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
           <div style={{ width: 10, height: 10, background: color, borderRadius: '50%' }} />
-          <span style={{ color: '#aaa' }}>{label}</span>
+          <span style={{ color: '#555' }}>{label}</span>
         </div>
       ))}
-      <div style={{ borderTop: '1px solid #333', marginTop: '6px', paddingTop: '6px', color: '#555' }}>
+      <div style={{ borderTop: '1px solid #ddd', marginTop: '6px', paddingTop: '6px', color: '#999' }}>
         ◯ PULSING = ML HOTSPOT
       </div>
-      <div style={{ color: '#555', marginTop: '4px' }}>CLICK ZONE = ML PREDICTIONS</div>
+      <div style={{ color: '#999', marginTop: '4px' }}>CLICK ZONE = ML FORECAST</div>
     </div>
   );
 }
 
-/* ─── Prediction Side Panel ──────────────────────────────────── */
+/* ─── Prediction Panel ───────────────────────────────────────── */
 interface PanelProps {
   zone: Zone;
   pred: ZonePrediction | null;
@@ -179,130 +162,81 @@ function PredictionPanel({ zone, pred, loading, onClose }: PanelProps) {
     <div style={{
       position: 'absolute', top: 0, right: 0, bottom: 0,
       width: '300px', zIndex: 2000,
-      background: 'rgba(0,4,0,0.97)',
+      background: 'rgba(255,255,255,0.98)',
       border: `1px solid ${color}`,
       borderRight: 'none',
-      fontFamily: 'Space Mono, monospace',
-      fontSize: '11px',
-      color: '#ccc',
-      display: 'flex',
-      flexDirection: 'column',
+      fontFamily: 'Space Mono, monospace', fontSize: '11px',
+      color: '#222',
+      display: 'flex', flexDirection: 'column',
       overflowY: 'auto',
-      boxShadow: `-8px 0 40px ${color}22`,
+      boxShadow: `-4px 0 24px rgba(0,0,0,0.08)`,
     }}>
       {/* Header */}
-      <div style={{
-        padding: '14px 16px',
-        borderBottom: `1px solid ${color}44`,
-        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-      }}>
+      <div style={{ padding: '14px 16px', borderBottom: `1px solid ${color}44`,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <div style={{ color, fontWeight: 900, fontSize: '13px', letterSpacing: '2px' }}>
             {zone.zone_id} // {zone.zone_name.toUpperCase()}
           </div>
-          <div style={{ color: '#555', marginTop: '4px', fontSize: '10px', letterSpacing: '1px' }}>
-            ML CRIME FORECAST
-          </div>
+          <div style={{ color: '#999', marginTop: '4px', fontSize: '10px', letterSpacing: '1px' }}>ML CRIME FORECAST</div>
         </div>
         <button onClick={onClose} style={{
-          background: 'none', border: `1px solid #333`, color: '#666',
-          cursor: 'pointer', padding: '2px 8px', fontFamily: 'Space Mono, monospace',
-          fontSize: '12px',
+          background: 'none', border: '1px solid #ddd', color: '#999',
+          cursor: 'pointer', padding: '2px 8px',
+          fontFamily: 'Space Mono, monospace', fontSize: '12px',
         }}>✕</button>
       </div>
 
       {/* Zone stats */}
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid #111' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <span style={{ color: '#555' }}>RISK STATUS</span>
-          <span style={{ color, fontWeight: 900 }}>{riskLabel(zone.risk_score)}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <span style={{ color: '#555' }}>RISK SCORE</span>
-          <span style={{ color }}>{zone.risk_score?.toFixed(2)}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <span style={{ color: '#555' }}>TREND</span>
-          <span style={{ color: '#D2FF00' }}>{trendIcon(zone.trend)} {zone.trend}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: '#555' }}>DOMINANT</span>
-          <span style={{ color: '#FF9500', fontSize: '10px' }}>{zone.dominant_crime}</span>
-        </div>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0' }}>
+        {[
+          { label: 'RISK STATUS', val: riskLabel(zone.risk_score), c: color },
+          { label: 'RISK SCORE',  val: zone.risk_score?.toFixed(2), c: color },
+          { label: 'TREND',       val: `${trendIcon(zone.trend)} ${zone.trend}`, c: '#1a7a00' },
+          { label: 'DOMINANT',    val: zone.dominant_crime, c: '#c87000' },
+        ].map((row, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <span style={{ color: '#999' }}>{row.label}</span>
+            <span style={{ color: row.c, fontWeight: 900 }}>{row.val}</span>
+          </div>
+        ))}
       </div>
 
       {/* ML Predictions */}
       <div style={{ padding: '12px 16px', flex: 1 }}>
-        <div style={{ color: '#D2FF00', letterSpacing: '2px', fontSize: '10px', marginBottom: '12px' }}>
-          ⚡ ML PREDICTIONS
-        </div>
-
-        {loading && (
-          <div style={{ color: '#333', letterSpacing: '2px', textAlign: 'center', paddingTop: '20px' }}>
-            COMPUTING...
-          </div>
-        )}
-
-        {!loading && !pred && (
-          <div style={{ color: '#333', fontSize: '10px', textAlign: 'center', paddingTop: '20px' }}>
-            NO PREDICTION DATA
-          </div>
-        )}
-
+        <div style={{ color: '#1a7a00', letterSpacing: '2px', fontSize: '10px', marginBottom: '12px' }}>⚡ ML PREDICTIONS</div>
+        {loading && <div style={{ color: '#ccc', textAlign: 'center', paddingTop: '20px' }}>COMPUTING...</div>}
+        {!loading && !pred && <div style={{ color: '#ccc', fontSize: '10px', textAlign: 'center', paddingTop: '20px' }}>NO PREDICTION DATA</div>}
         {!loading && pred && (
           <>
-            <div style={{
-              display: 'inline-block',
-              background: '#111', border: '1px solid #333',
-              padding: '2px 8px', marginBottom: '14px',
-              fontSize: '10px', color: '#888', letterSpacing: '1px',
-            }}>
+            <div style={{ display: 'inline-block', background: '#f5f5f0', border: '1px solid #ddd',
+              padding: '2px 8px', marginBottom: '14px', fontSize: '10px', color: '#888', letterSpacing: '1px' }}>
               {pred.timeband.toUpperCase()} // {pred.hour}:00
             </div>
-
             {pred.predictions.map((p, i) => {
-              const barColor = mlRiskColor(p.risk_level);
+              const bc = mlRiskColor(p.risk_level);
               const pct = Math.round(p.probability * 100);
               return (
                 <div key={i} style={{ marginBottom: '14px' }}>
-                  <div style={{
-                    display: 'flex', justifyContent: 'space-between',
-                    marginBottom: '4px', fontSize: '10px',
-                  }}>
-                    <span style={{ color: '#fff', letterSpacing: '1px' }}>
-                      #{i + 1} {p.crime_type}
-                    </span>
-                    <span style={{ color: barColor, fontWeight: 900 }}>
-                      {pct}%
-                    </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '10px' }}>
+                    <span style={{ color: '#111', letterSpacing: '1px' }}>#{i + 1} {p.crime_type}</span>
+                    <span style={{ color: bc, fontWeight: 900 }}>{pct}%</span>
                   </div>
-                  <div style={{ height: '4px', background: '#111', borderRadius: '2px' }}>
-                    <div style={{
-                      height: '100%',
-                      width: `${Math.min(pct * 3.5, 100)}%`,
-                      background: barColor,
-                      borderRadius: '2px',
-                      transition: 'width 0.5s ease',
-                    }} />
+                  <div style={{ height: '4px', background: '#eee', borderRadius: '2px' }}>
+                    <div style={{ height: '100%', width: `${Math.min(pct * 3.5, 100)}%`,
+                      background: bc, borderRadius: '2px', transition: 'width 0.5s ease' }} />
                   </div>
-                  <div style={{ color: '#444', fontSize: '9px', marginTop: '2px', letterSpacing: '1px' }}>
-                    {p.risk_level} RISK
-                  </div>
+                  <div style={{ color: '#aaa', fontSize: '9px', marginTop: '2px', letterSpacing: '1px' }}>{p.risk_level} RISK</div>
                 </div>
               );
             })}
-
-            <div style={{
-              borderTop: '1px solid #111', paddingTop: '10px', marginTop: '4px',
-              fontSize: '9px', color: '#444',
-            }}>
+            <div style={{ borderTop: '1px solid #eee', paddingTop: '10px', marginTop: '4px', fontSize: '9px', color: '#aaa' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                <span>MODEL ACCURACY</span>
-                <span>{(pred.model_accuracy * 100).toFixed(1)}%</span>
+                <span>MODEL ACCURACY</span><span>{(pred.model_accuracy * 100).toFixed(1)}%</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>TOP-3 ACCURACY</span>
-                <span style={{ color: '#D2FF00' }}>{(pred.top3_accuracy * 100).toFixed(1)}%</span>
+                <span style={{ color: '#1a7a00' }}>{(pred.top3_accuracy * 100).toFixed(1)}%</span>
               </div>
             </div>
           </>
@@ -317,14 +251,8 @@ function MLBadge({ zone, topRisk }: { zone: Zone; topRisk: string | null }) {
   if (!topRisk) return null;
   const badgeColor = mlRiskColor(topRisk);
   return (
-    <CircleMarker
-      center={[zone.lat, zone.lon]}
-      radius={7}
-      pathOptions={{
-        color: badgeColor, fillColor: badgeColor,
-        fillOpacity: 0.25, weight: 2, opacity: 0.9,
-      }}
-    />
+    <CircleMarker center={[zone.lat, zone.lon]} radius={7}
+      pathOptions={{ color: badgeColor, fillColor: badgeColor, fillOpacity: 0.25, weight: 2, opacity: 0.9 }} />
   );
 }
 
@@ -335,94 +263,68 @@ export default function CrimeMap() {
   const [selected,     setSelected]     = useState<Zone | null>(null);
   const [panelPred,    setPanelPred]    = useState<ZonePrediction | null>(null);
   const [panelLoading, setPanelLoading] = useState(false);
-
   const { predMap, lastUpdated, fetchZone } = usePredictions(60_000);
 
   useEffect(() => {
     axios.get('/api/zones')
-      .then(r => {
-        const data = Array.isArray(r.data) ? r.data : r.data.zones || [];
-        setZones(data);
-      })
+      .then(r => { const d = Array.isArray(r.data) ? r.data : r.data.zones || []; setZones(d); })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
   const handleZoneClick = useCallback(async (zone: Zone) => {
-    setSelected(zone);
-    setPanelPred(null);
-    setPanelLoading(true);
-    const now  = new Date();
-    const pred = await fetchZone(
-      zone.zone_id,
-      now.getHours(),
-      now.getDay(),
-      now.getMonth() + 1,
-    );
-    setPanelPred(pred);
-    setPanelLoading(false);
+    setSelected(zone); setPanelPred(null); setPanelLoading(true);
+    const now = new Date();
+    const pred = await fetchZone(zone.zone_id, now.getHours(), now.getDay(), now.getMonth() + 1);
+    setPanelPred(pred); setPanelLoading(false);
   }, [fetchZone]);
 
   if (loading) return (
-    <div style={{
-      height: '520px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: '#000', color: '#D2FF00', fontFamily: 'Space Mono, monospace', letterSpacing: '4px',
-    }}>
+    <div style={{ height: '520px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: '#f5f5f0', color: '#1a7a00', fontFamily: 'Space Mono, monospace', letterSpacing: '4px', fontSize: '0.75rem' }}>
       LOADING SPATIAL INTEL...
     </div>
   );
 
-  const geoData: GeoJSON.FeatureCollection = {
-    type: 'FeatureCollection',
-    features: zones.map(makePolygon),
-  };
+  const geoData: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: zones.map(makePolygon) };
   const hotspotCount = zones.filter(z => z.hawkes_intensity > 0).length;
 
   return (
-    /* Overflow hidden prevents any internal Leaflet element from
-       causing horizontal scroll on the full-bleed wrapper          */
-    <div style={{
-      height: '520px',
-      width: '100%',
-      position: 'relative',
-      display: 'flex',
-      overflow: 'hidden',       /* ← overflow guard */
-      maxWidth: '100vw',        /* ← hard width cap  */
-    }}>
+    <div style={{ height: '520px', width: '100%', position: 'relative', display: 'flex', overflow: 'hidden', maxWidth: '100vw' }}>
       <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
 
         {/* Status bar */}
         <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <div style={{ background: '#000', border: '1px solid #D2FF00', padding: '4px 10px',
-            fontFamily: 'Space Mono, monospace', fontSize: '10px', color: '#D2FF00', letterSpacing: '3px' }}>
+          <div style={{ background: 'rgba(255,255,255,0.95)', border: '1px solid #1a7a00', padding: '4px 10px',
+            fontFamily: 'Space Mono, monospace', fontSize: '10px', color: '#1a7a00', letterSpacing: '3px',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
             ● LIVE // {zones.length} ZONES
           </div>
           {hotspotCount > 0 && (
-            <div style={{ background: '#000', border: '1px solid #FF3B30', padding: '4px 10px',
-              fontFamily: 'Space Mono, monospace', fontSize: '10px', color: '#FF3B30', letterSpacing: '3px' }}>
+            <div style={{ background: 'rgba(255,255,255,0.95)', border: '1px solid #c0392b', padding: '4px 10px',
+              fontFamily: 'Space Mono, monospace', fontSize: '10px', color: '#c0392b', letterSpacing: '3px',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
               ⚡ {hotspotCount} ML HOTSPOT{hotspotCount > 1 ? 'S' : ''}
             </div>
           )}
           {lastUpdated && (
-            <div style={{ background: '#000', border: '1px solid #333', padding: '4px 10px',
-              fontFamily: 'Space Mono, monospace', fontSize: '9px', color: '#444', letterSpacing: '1px' }}>
+            <div style={{ background: 'rgba(255,255,255,0.95)', border: '1px solid #ddd', padding: '4px 10px',
+              fontFamily: 'Space Mono, monospace', fontSize: '9px', color: '#aaa', letterSpacing: '1px' }}>
               ML SYNCED {lastUpdated.toLocaleTimeString()}
             </div>
           )}
         </div>
 
-        <MapContainer
-          center={[19.1, 72.877]}
-          zoom={11}
-          style={{ height: '100%', width: '100%', background: '#000' }}
-          zoomControl
-        >
+        <MapContainer center={[19.1, 72.877]} zoom={11}
+          style={{ height: '100%', width: '100%', background: '#f5f5f0' }} zoomControl>
+
+          {/* Light tile — no dark inversion needed */}
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           />
 
-          {/* ← Step 6: fixes grey tiles after CSS transitions */}
+          {/* Resize fixer */}
           <MapResizeFixer />
 
           <GeoJSON
@@ -430,25 +332,25 @@ export default function CrimeMap() {
             data={geoData}
             style={(f) => {
               const color = riskColor(f?.properties?.risk_score || 0);
-              return { fillColor: color, fillOpacity: 0.30, color, weight: 1.5, opacity: 0.85 };
+              return { fillColor: color, fillOpacity: 0.22, color, weight: 1.5, opacity: 0.85 };
             }}
             onEachFeature={(feature, layer) => {
               const z = feature.properties as Zone;
               const color = riskColor(z.risk_score);
               const hasML = z.hawkes_intensity > 0;
               layer.bindTooltip(`
-                <div style="background:#000;border:1px solid ${color};padding:10px 14px;font-family:'Space Mono',monospace;font-size:11px;color:#fff;min-width:200px;line-height:1.8">
+                <div style="background:#fff;border:1px solid ${color};padding:10px 14px;font-family:'Space Mono',monospace;font-size:11px;color:#111;min-width:200px;line-height:1.8;box-shadow:0 4px 12px rgba(0,0,0,0.1)">
                   <div style="color:${color};font-weight:900;letter-spacing:2px;margin-bottom:8px;font-size:12px">${z.zone_id} // ${z.zone_name.toUpperCase()}</div>
                   <div>STATUS: <span style="color:${color};font-weight:900">${riskLabel(z.risk_score)}</span></div>
                   <div>RISK SCORE: <span style="color:${color}">${z.risk_score?.toFixed(2)}</span></div>
-                  <div>TREND: <span style="color:#D2FF00">${trendIcon(z.trend)} ${z.trend}</span></div>
-                  <div>DOMINANT: <span style="color:#FF9500">${z.dominant_crime}</span></div>
-                  <div style="border-top:1px solid #222;margin:6px 0"></div>
+                  <div>TREND: <span style="color:#1a7a00">${trendIcon(z.trend)} ${z.trend}</span></div>
+                  <div>DOMINANT: <span style="color:#c87000">${z.dominant_crime}</span></div>
+                  <div style="border-top:1px solid #eee;margin:6px 0"></div>
                   <div>EVENTS 1H: ${z.event_count_1h}</div>
                   <div>EVENTS 6H: ${z.event_count_6h}</div>
                   <div>EVENTS 24H: ${z.event_count_24h}</div>
-                  ${hasML ? `<div style="border-top:1px solid #333;margin:6px 0"></div><div style="color:#FF3B30;font-weight:900">⚡ HAWKES: ${z.hawkes_intensity?.toFixed(3)}</div>` : ''}
-                  <div style="color:#555;font-size:9px;margin-top:6px;letter-spacing:1px">CLICK FOR ML FORECAST →</div>
+                  ${hasML ? `<div style="border-top:1px solid #eee;margin:6px 0"></div><div style="color:#c0392b;font-weight:900">⚡ HAWKES: ${z.hawkes_intensity?.toFixed(3)}</div>` : ''}
+                  <div style="color:#aaa;font-size:9px;margin-top:6px;letter-spacing:1px">CLICK FOR ML FORECAST →</div>
                 </div>
               `, { className: 'sentinel-tooltip', sticky: true });
               layer.on('click', () => handleZoneClick(z));
@@ -457,16 +359,13 @@ export default function CrimeMap() {
 
           {zones.map(zone => (
             <CircleMarker key={zone.zone_id} center={[zone.lat, zone.lon]} radius={3}
-              pathOptions={{ color: '#fff', fillColor: '#fff', fillOpacity: 0.9, weight: 1 }}
-            />
+              pathOptions={{ color: '#333', fillColor: '#333', fillOpacity: 0.8, weight: 1 }} />
           ))}
-
           {zones.map(zone => {
             const p = predMap[zone.zone_id];
             const topRisk = p?.predictions?.[0]?.risk_level ?? null;
             return <MLBadge key={`badge-${zone.zone_id}`} zone={zone} topRisk={topRisk} />;
           })}
-
           <MLPulseRings zones={zones} />
           <Legend />
         </MapContainer>
@@ -474,12 +373,8 @@ export default function CrimeMap() {
 
       {selected && (
         <div style={{ width: '300px', position: 'relative', flexShrink: 0 }}>
-          <PredictionPanel
-            zone={selected}
-            pred={panelPred}
-            loading={panelLoading}
-            onClose={() => { setSelected(null); setPanelPred(null); }}
-          />
+          <PredictionPanel zone={selected} pred={panelPred} loading={panelLoading}
+            onClose={() => { setSelected(null); setPanelPred(null); }} />
         </div>
       )}
     </div>
