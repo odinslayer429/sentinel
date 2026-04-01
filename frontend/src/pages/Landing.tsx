@@ -32,6 +32,25 @@ const MODULES = [
     stats:['TREND LINES','RESOLUTION RATE','AI ACCURACY'] },
 ]
 
+// Inline intro copy — use plain ASCII apostrophes only (curly quotes break OXC parser)
+const INTRO_BLOCKS = [
+  {
+    eyebrow: 'THE PROBLEM',
+    heading: 'Crime does not wait for morning briefings.',
+    body: "Traditional policing reacts. Sentinel predicts. By the time an officer reads yesterday's report, the threat topology has shifted. Sentinel ingests live data and returns actionable intelligence in seconds, not hours.",
+  },
+  {
+    eyebrow: 'THE SYSTEM',
+    heading: 'Nine modules. One unified command layer.',
+    body: 'From spatial heatmaps to AI-generated tactical briefings, every Sentinel module shares the same real-time data backbone. Information flows in, intelligence flows out. No silos, no lag, no guesswork.',
+  },
+  {
+    eyebrow: 'THE TECHNOLOGY',
+    heading: 'Gemini AI + Linear Programming + LSTM.',
+    body: 'Sentinel pairs Google Gemini 1.5 Pro with classical operations research methods. AI handles language and context. Math handles optimisation. Together, they close the gap between raw data and field-ready decisions.',
+  },
+]
+
 export default function Landing() {
   const navigate = useNavigate()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -113,62 +132,30 @@ export default function Landing() {
       const { ScrollTrigger } = await import('gsap/ScrollTrigger')
       gsap.registerPlugin(ScrollTrigger)
       gsapRef.current = gsap
-      const triggers: any[] = []
 
       // Hero parallax layers
       if (heroRef.current) {
         const grid = heroRef.current.querySelector('.lp-hero-grid')
         const inner = heroRef.current.querySelector('.lp-hero-inner')
         const scrollCue = heroRef.current.querySelector('.lp-scroll-cue')
-        if (grid) {
-          const t = gsap.to(grid, {
-            yPercent: 30,
-            ease: 'none',
-            scrollTrigger: { trigger: heroRef.current, start: 'top top', end: 'bottom top', scrub: true }
-          })
-          triggers.push(t.scrollTrigger)
-        }
-        if (inner) {
-          const t = gsap.to(inner, {
-            yPercent: 20,
-            opacity: 0,
-            ease: 'none',
-            scrollTrigger: { trigger: heroRef.current, start: 'top top', end: '80% top', scrub: true }
-          })
-          triggers.push(t.scrollTrigger)
-        }
-        if (scrollCue) {
-          const t = gsap.to(scrollCue, {
-            opacity: 0,
-            ease: 'none',
-            scrollTrigger: { trigger: heroRef.current, start: 'top top', end: '30% top', scrub: true }
-          })
-          triggers.push(t.scrollTrigger)
-        }
+        if (grid) gsap.to(grid, { yPercent: 30, ease: 'none', scrollTrigger: { trigger: heroRef.current, start: 'top top', end: 'bottom top', scrub: true } })
+        if (inner) gsap.to(inner, { yPercent: 20, opacity: 0, ease: 'none', scrollTrigger: { trigger: heroRef.current, start: 'top top', end: '80% top', scrub: true } })
+        if (scrollCue) gsap.to(scrollCue, { opacity: 0, ease: 'none', scrollTrigger: { trigger: heroRef.current, start: 'top top', end: '30% top', scrub: true } })
       }
 
-      // Intro blocks stagger
+      // Intro blocks — directional slide
       document.querySelectorAll('.lp-intro-block').forEach((el, i) => {
         gsap.fromTo(el,
           { opacity: 0, x: i % 2 === 0 ? -60 : 60 },
-          {
-            opacity: 1, x: 0, duration: 1, ease: 'expo.out',
-            scrollTrigger: { trigger: el, start: 'top 80%', toggleActions: 'play none none none' }
-          }
+          { opacity: 1, x: 0, duration: 1, ease: 'expo.out', scrollTrigger: { trigger: el, start: 'top 80%', toggleActions: 'play none none none' } }
         )
       })
 
       // Modules header
       const mhdr = document.querySelector('.lp-modules-header')
-      if (mhdr) {
-        gsap.fromTo(mhdr,
-          { opacity: 0, y: 50 },
-          { opacity: 1, y: 0, duration: 1, ease: 'expo.out',
-            scrollTrigger: { trigger: mhdr, start: 'top 85%', toggleActions: 'play none none none' } }
-        )
-      }
+      if (mhdr) gsap.fromTo(mhdr, { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 1, ease: 'expo.out', scrollTrigger: { trigger: mhdr, start: 'top 85%', toggleActions: 'play none none none' } })
 
-      // Module rows — card from one side, text from other
+      // Module rows — card from one side, text from opposite
       document.querySelectorAll('.lp-module').forEach((section, i) => {
         const card = section.querySelector('.lp-module-visual')
         const text = section.querySelector('.lp-module-text')
@@ -181,38 +168,23 @@ export default function Landing() {
             trigger: section,
             start: 'top 75%',
             toggleActions: 'play none none none',
-            onEnter: () => {
-              setActiveModule(i)
-              setBgColor(MODULES[i]?.color ?? 'transparent')
-            }
+            onEnter: () => { setActiveModule(i); setBgColor(MODULES[i]?.color ?? 'transparent') },
           }
         })
         if (card) tl.fromTo(card, { opacity: 0, x: cardX }, { opacity: 1, x: 0, duration: 1.1, ease: 'expo.out' }, 0)
         if (text) tl.fromTo(text, { opacity: 0, x: textX }, { opacity: 1, x: 0, duration: 1.1, ease: 'expo.out' }, 0.12)
       })
 
-      // Module progress line scrub
+      // Scrub progress lines
       document.querySelectorAll('.lp-module').forEach((section) => {
         const line = section.querySelector('.lp-module-progress-fill')
         if (!line) return
-        gsap.fromTo(line,
-          { scaleX: 0 },
-          {
-            scaleX: 1, ease: 'none',
-            scrollTrigger: { trigger: section, start: 'top 70%', end: 'bottom 70%', scrub: 0.4 }
-          }
-        )
+        gsap.fromTo(line, { scaleX: 0 }, { scaleX: 1, ease: 'none', scrollTrigger: { trigger: section, start: 'top 70%', end: 'bottom 70%', scrub: 0.4 } })
       })
 
       // CTA
       const cta = document.querySelector('.lp-cta')
-      if (cta) {
-        gsap.fromTo(cta,
-          { opacity: 0, y: 60 },
-          { opacity: 1, y: 0, duration: 1.2, ease: 'expo.out',
-            scrollTrigger: { trigger: cta, start: 'top 85%', toggleActions: 'play none none none' } }
-        )
-      }
+      if (cta) gsap.fromTo(cta, { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 1.2, ease: 'expo.out', scrollTrigger: { trigger: cta, start: 'top 85%', toggleActions: 'play none none none' } })
 
       cleanup = () => { ScrollTrigger.getAll().forEach(st => st.kill()) }
     }
@@ -232,12 +204,11 @@ export default function Landing() {
       {/* Ambient BG glow that shifts per module */}
       <div className="lp-ambient" style={{'--ambient-color': bgColor} as React.CSSProperties} aria-hidden="true" />
 
-      {/* Grain */}
+      {/* Grain + spine */}
       <div className="lp-grain" aria-hidden="true" />
-      {/* Vertical spine */}
       <div className="lp-spine" aria-hidden="true" />
 
-      {/* Fixed module index tracker */}
+      {/* Fixed module tracker dots */}
       <nav className="lp-module-tracker" aria-label="Module navigation">
         {MODULES.map((m, i) => (
           <button
@@ -254,40 +225,30 @@ export default function Landing() {
       {/* ── HERO ── */}
       <section className="lp-hero" ref={heroRef}>
         <div className="lp-hero-grid" aria-hidden="true" />
-
-        {/* Corner brackets */}
         {(['tl','tr','bl','br'] as const).map(pos => (
           <div key={pos} className={`lp-bracket lp-bracket-${pos}`} aria-hidden="true" />
         ))}
 
         <div className="lp-hero-inner">
           <div className="lp-hero-eyebrow">MAHARASHTRA POLICE · AI OPERATIONS PLATFORM</div>
-
-          <div
-            ref={wordmarkRef}
-            className={`lp-hero-wordmark${glitch ? ' lp-glitch' : ''}`}
-            data-text={typedTitle}
-          >
+          <div ref={wordmarkRef} className={`lp-hero-wordmark${glitch ? ' lp-glitch' : ''}`} data-text={typedTitle}>
             {typedTitle}
             {!titleDone && <span className="lp-cursor-blink">|</span>}
           </div>
-
           <div className="lp-hero-tagline">
             PREDICTIVE CRIME INTELLIGENCE &amp; TACTICAL FORCE ALLOCATION
           </div>
-
           <div className="lp-hero-meta">
-            {[['9','OPERATIONAL MODULES'],['20+','ZONES MONITORED'],['RT','REAL-TIME INTEL']].map(([num, label], i) => (
-              <>
-                {i > 0 && <div key={`div-${i}`} className="lp-hero-meta-divider" />}
-                <div key={label} className="lp-hero-meta-item">
+            {([['9','OPERATIONAL MODULES'],['20+','ZONES MONITORED'],['RT','REAL-TIME INTEL']] as [string,string][]).map(([num, label], i) => (
+              <React.Fragment key={label}>
+                {i > 0 && <div className="lp-hero-meta-divider" />}
+                <div className="lp-hero-meta-item">
                   <span className="lp-hero-meta-num">{num}</span>
                   <span className="lp-hero-meta-label">{label}</span>
                 </div>
-              </>
+              </React.Fragment>
             ))}
           </div>
-
           <div className="lp-hero-actions">
             <button className="lp-btn-primary" onClick={enterDash} data-mag>
               <span>ENTER OPERATIONS CENTER</span>
@@ -306,14 +267,7 @@ export default function Landing() {
       </section>
 
       {/* ── INTRO BLOCKS ── */}
-      {[
-        { eyebrow:'THE PROBLEM', heading:'Crime does not wait for morning briefings.',
-          body:'Traditional policing reacts. Sentinel predicts. By the time an officer reads yesterday's report, the threat topology has shifted. Sentinel ingests live data and returns actionable intelligence in seconds, not hours.' },
-        { eyebrow:'THE SYSTEM', heading:'Nine modules. One unified command layer.',
-          body:'From spatial heatmaps to AI-generated tactical briefings, every Sentinel module shares the same real-time data backbone. Information flows in, intelligence flows out. No silos, no lag, no guesswork.' },
-        { eyebrow:'THE TECHNOLOGY', heading:'Gemini AI + Linear Programming + LSTM.',
-          body:'Sentinel pairs Google Gemini 1.5 Pro with classical operations research methods. AI handles language and context. Math handles optimisation. Together, they close the gap between raw data and field-ready decisions.' },
-      ].map((block, i) => (
+      {INTRO_BLOCKS.map((block, i) => (
         <section key={i} id={`intro-${i}`} className={`lp-intro-block lp-intro-${i % 2 === 0 ? 'left' : 'right'}`}>
           <div className="lp-intro-eyebrow">{block.eyebrow}</div>
           <h2 className="lp-intro-heading">{block.heading}</h2>
@@ -337,7 +291,6 @@ export default function Landing() {
           className={`lp-module lp-module-${mod.side}`}
           style={{'--mod-color': mod.color} as React.CSSProperties}
         >
-          {/* Scrub progress line */}
           <div className="lp-module-progress">
             <div className="lp-module-progress-fill" style={{background: mod.color}} />
           </div>
@@ -352,8 +305,7 @@ export default function Landing() {
               <div className="lp-module-card-label">{mod.label}</div>
               <div className="lp-module-card-stats">
                 {mod.stats.map(s => (
-                  <span key={s} className="lp-module-card-stat"
-                    style={{borderColor:`${mod.color}44`, color: mod.color}}>{s}</span>
+                  <span key={s} className="lp-module-card-stat" style={{borderColor:`${mod.color}44`, color: mod.color}}>{s}</span>
                 ))}
               </div>
               <div className="lp-module-card-lines" aria-hidden="true">
@@ -370,8 +322,7 @@ export default function Landing() {
             <p className="lp-module-text-desc">{mod.desc}</p>
             <div className="lp-module-text-tags">
               {mod.stats.map(s => (
-                <span key={s} className="lp-module-text-tag"
-                  style={{'--tag-color': mod.color} as React.CSSProperties}>{s}</span>
+                <span key={s} className="lp-module-text-tag" style={{'--tag-color': mod.color} as React.CSSProperties}>{s}</span>
               ))}
             </div>
           </div>
