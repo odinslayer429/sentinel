@@ -40,7 +40,8 @@
   border:1.5px solid rgba(210,255,0,0.55);
   border-radius:50%; pointer-events:none;
   z-index:9999; will-change:transform;
-  transition: width .35s var(--ease-expo), height .35s var(--ease-expo), border-color .25s, background .25s;
+  transition: width .35s var(--ease-expo), height .35s var(--ease-expo),
+              border-color .25s, background .25s;
 }
 .sl-cursor-ring.cursor-mag {
   width:60px; height:60px;
@@ -233,7 +234,7 @@
    BUTTONS
 ═══════════════════════════════════════════ */
 .sl-btn-primary {
-  display:flex; align-items:center; gap:0.6rem;
+  display:inline-flex; align-items:center; gap:0.6rem;
   padding:0.9rem 2rem;
   background:var(--lime); color:#0a0a0a;
   border:none; cursor:pointer;
@@ -295,128 +296,155 @@
 @media (max-width:768px) { .sl-dots { display:none; } }
 
 /* ═══════════════════════════════════════════
-   MODULE SECTIONS
+   MODULE SECTIONS  — strict 50/50 split
+   LEFT HALF  = visual panel (dark bg, fills full height)
+   RIGHT HALF = info text (padded, centred vertically)
 ═══════════════════════════════════════════ */
 .mod-section {
-  min-height:100svh;
-  display:flex; align-items:center; justify-content:center;
-  padding:6rem 3rem;
-  position:relative;
-}
-.mod-section::before {
-  content:''; position:absolute;
-  top:0; left:3rem; right:3rem; height:1px;
-  background:rgba(255,255,255,0.05);
+  /* full-viewport row split into two equal columns */
+  min-height: 100svh;
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* ← this is the 50/50 */
+  position: relative;
+  overflow: hidden;
 }
 
-.mod-panel {
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:5rem; align-items:center;
-  max-width:1160px; width:100%;
+/* ── Visual half ────────────────────────── */
+.mod-visual-half {
+  /* fills its grid cell completely */
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* slightly darker than page bg to frame the visual */
+  background: #07070b;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  min-height: 100svh;
+  padding: 3rem 2.5rem;
+  overflow: hidden;
 }
 
-/* right variant: visual col 2, text col 1 */
-.mod-section-right .mod-visual-right { order:2; }
-.mod-section-right .mod-text-left    { order:1; }
+/* flip: visual on right for alternating rows */
+.mod-section-flip .mod-visual-half {
+  order: 2;
+  border-right: none;
+  border-left: 1px solid rgba(255,255,255,0.06);
+}
+.mod-section-flip .mod-info-half {
+  order: 1;
+}
 
-/* left variant: visual col 1, text col 2 */
-.mod-section-left .mod-visual-left  { order:1; }
-.mod-section-left .mod-text-right   { order:2; }
+/* inner glow blob behind the visual */
+.mod-visual-half::before {
+  content: '';
+  position: absolute;
+  width: 60%; height: 50%;
+  background: radial-gradient(circle, var(--mod-color, #D2FF00) 0%, transparent 70%);
+  opacity: 0.07;
+  pointer-events: none;
+  border-radius: 50%;
+  transition: opacity .4s;
+}
 
-/* ── Card ── */
-.mod-visual-wrap { display:flex; align-items:center; justify-content:center; }
+/* ── Info half ─────────────────────────── */
+.mod-info-half {
+  display: flex;
+  align-items: center;
+  padding: 4rem 4rem 4rem 5rem;
+  min-height: 100svh;
+}
+.mod-section-flip .mod-info-half {
+  padding: 4rem 5rem 4rem 4rem;
+}
 
+.mod-info-inner {
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* eyebrow: "NOW AVAILABLE" style label */
+.mod-info-eyebrow {
+  font-size: 0.6rem;
+  letter-spacing: 0.35em;
+  font-weight: 700;
+  color: var(--mod-color, var(--lime));
+  text-transform: uppercase;
+}
+.mod-info-num {
+  font-size: 0.5rem;
+  letter-spacing: 0.3em;
+  color: rgba(255,255,255,0.2);
+  font-weight: 700;
+}
+.mod-info-title {
+  font-size: clamp(1.8rem, 3.5vw, 3rem);
+  font-weight: 900;
+  color: #fff;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.mod-info-desc {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: rgba(255,255,255,0.55);
+  max-width: 44ch;
+  margin: 0;
+}
+.mod-info-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.mod-info-tag {
+  font-size: 0.48rem;
+  letter-spacing: 0.18em;
+  padding: 4px 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.4);
+  border-radius: 2px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.02);
+}
+.mod-info-cta {
+  margin-top: 0.5rem;
+}
+
+/* ── Visual card inside the visual half ── */
 .mod-card {
-  position:relative;
-  width:100%; max-width:420px;
-  padding:2rem 2rem 1.5rem;
-  background:rgba(255,255,255,0.03);
-  backdrop-filter:blur(24px) saturate(160%);
-  -webkit-backdrop-filter:blur(24px) saturate(160%);
-  border:1px solid rgba(255,255,255,0.07);
-  border-top:1px solid rgba(255,255,255,0.11);
-  box-shadow:var(--glass-shine), 0 24px 64px rgba(0,0,0,0.5);
-  border-radius:6px; overflow:hidden;
-  transition:transform .4s var(--ease-expo), box-shadow .4s;
+  width: 100%;
+  max-width: 440px;
+  position: relative;
 }
-.mod-card:hover {
-  transform:translateY(-8px) scale(1.012);
-  box-shadow:var(--glass-shine), 0 40px 80px rgba(0,0,0,0.6);
-}
-.mod-card-glow {
-  position:absolute; bottom:-40px; left:50%;
-  transform:translateX(-50%);
-  width:60%; height:80px;
-  opacity:0.1; filter:blur(30px);
-  border-radius:50%; pointer-events:none;
-  transition:opacity .4s;
-}
-.mod-card:hover .mod-card-glow { opacity:0.22; }
 .mod-card-id {
-  font-size:0.5rem; letter-spacing:0.3em;
-  color:rgba(255,255,255,0.2); font-weight:700;
-  margin-bottom:0.75rem;
+  font-size: 0.5rem;
+  letter-spacing: 0.3em;
+  color: rgba(255,255,255,0.2);
+  font-weight: 700;
+  margin-bottom: 0.75rem;
 }
-
-/* SVG visual */
 .mod-svg {
-  width:100%; height:auto;
-  display:block; margin-bottom:1rem;
+  width: 100%;
+  height: auto;
+  display: block;
 }
-
 .mod-card-stats {
-  display:flex; flex-wrap:wrap; gap:0.4rem;
-  margin-top:0.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 1rem;
 }
 .mod-card-stat {
-  font-size:0.45rem; letter-spacing:0.15em;
-  padding:3px 8px;
-  border:1px solid;
-  border-radius:2px; font-weight:700;
-  background:rgba(255,255,255,0.02);
-}
-
-/* ── Text ── */
-.mod-text-wrap {
-  display:flex; flex-direction:column; gap:0.65rem;
-}
-.mod-text-id {
-  font-size:0.5rem; letter-spacing:0.35em;
-  font-weight:900;
-}
-.mod-text-label {
-  font-size:0.5rem; letter-spacing:0.25em;
-  color:rgba(255,255,255,0.3); font-weight:700;
-}
-.mod-text-title {
-  font-size:clamp(1.6rem,3vw,2.4rem);
-  font-weight:900; color:#fff;
-  line-height:1.1; letter-spacing:-0.01em;
-  margin:0;
-}
-.mod-text-desc {
-  font-size:0.95rem; line-height:1.8;
-  color:rgba(255,255,255,0.45);
-  max-width:46ch; margin:0;
-}
-.mod-text-tags {
-  display:flex; flex-wrap:wrap; gap:0.4rem;
-  margin-top:0.25rem;
-}
-.mod-text-tag {
-  font-size:0.45rem; letter-spacing:0.15em;
-  padding:4px 10px;
-  border:1px solid rgba(255,255,255,0.1);
-  color:rgba(255,255,255,0.4);
-  border-radius:2px; font-weight:700;
-  background:rgba(255,255,255,0.02);
-}
-.mod-text-line {
-  height:2px; width:40px;
-  border-radius:2px;
-  margin-top:0.5rem;
-  opacity:0.7;
+  font-size: 0.45rem;
+  letter-spacing: 0.15em;
+  padding: 3px 10px;
+  border: 1px solid;
+  border-radius: 2px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.02);
 }
 
 /* ═══════════════════════════════════════════
@@ -456,17 +484,21 @@
 /* ═══════════════════════════════════════════
    RESPONSIVE
 ═══════════════════════════════════════════ */
-@media (max-width:900px) {
-  .mod-panel {
-    grid-template-columns:1fr;
-    gap:2.5rem;
+@media (max-width: 900px) {
+  .mod-section {
+    grid-template-columns: 1fr;
+    min-height: unset;
   }
-  .mod-section-right .mod-visual-right,
-  .mod-section-right .mod-text-left,
-  .mod-section-left .mod-visual-left,
-  .mod-section-left .mod-text-right { order:unset; }
-  .mod-section { padding:4rem 1.5rem; }
-  .sl-hero-meta { flex-wrap:wrap; gap:1rem; padding:1rem; }
+  .mod-visual-half {
+    min-height: 55vw;
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .mod-section-flip .mod-visual-half { order: unset; border-left: none; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .mod-section-flip .mod-info-half   { order: unset; }
+  .mod-info-half { padding: 3rem 1.5rem; min-height: unset; }
+  .mod-section-flip .mod-info-half { padding: 3rem 1.5rem; }
+  .sl-hero-meta    { flex-wrap:wrap; gap:1rem; padding:1rem; }
   .sl-hero-actions { flex-direction:column; }
-  .sl-footer { flex-direction:column; gap:0.5rem; text-align:center; padding:1.5rem; }
+  .sl-footer       { flex-direction:column; gap:0.5rem; text-align:center; padding:1.5rem; }
 }
