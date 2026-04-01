@@ -20,20 +20,19 @@
   --green:  #34c759;
   --blue:   #0a84ff;
 
-  --text-1: #f0f0f0;     /* headings */
-  --text-2: #a0a0a8;     /* body */
-  --text-3: #55555f;     /* muted labels */
+  --text-1: #f0f0f0;
+  --text-2: #a0a0a8;
+  --text-3: #55555f;
 
   --mono: 'Space Mono', monospace;
   --sans: 'Inter', sans-serif;
 
-  --nav-h: 60px;
+  --nav-h:    60px;
   --ticker-h: 44px;
 
-  /* transitions */
-  --t-fast:   0.15s ease;
-  --t-mid:    0.3s cubic-bezier(0.22,1,0.36,1);
-  --t-slow:   0.6s cubic-bezier(0.22,1,0.36,1);
+  --t-fast: 0.15s ease;
+  --t-mid:  0.3s cubic-bezier(0.22,1,0.36,1);
+  --t-slow: 0.6s cubic-bezier(0.22,1,0.36,1);
 }
 
 /* ─── Reset ─────────────────────────────────────────────────────────── */
@@ -55,19 +54,71 @@ body {
 ::-webkit-scrollbar-thumb:hover  { background: rgba(210,255,0,0.4); }
 
 /* ─── Global keyframes ──────────────────────────────────────────────── */
-@keyframes spin    { to { transform: rotate(360deg); } }
-@keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
-@keyframes glow    { 0%,100% { box-shadow: 0 0 6px  rgba(210,255,0,0.2); }
-                        50%  { box-shadow: 0 0 18px rgba(210,255,0,0.5); } }
-@keyframes fadeUp  { from { opacity:0; transform:translateY(16px); }
-                     to   { opacity:1; transform:translateY(0); } }
-@keyframes fadeIn  { from { opacity:0; } to { opacity:1; } }
-@keyframes ticker  { from { transform:translateX(100vw); } to { transform:translateX(-100%); } }
-@keyframes scanMove{ from { transform:translateY(0); } to { transform:translateY(4px); } }
-@keyframes borderPulse {
-  0%,100% { border-color: rgba(210,255,0,0.1); }
-  50%     { border-color: rgba(210,255,0,0.4); }
+@keyframes spin        { to { transform: rotate(360deg); } }
+@keyframes pulse       { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+@keyframes glow        { 0%,100% { box-shadow: 0 0 6px  rgba(210,255,0,0.2); }
+                             50% { box-shadow: 0 0 18px rgba(210,255,0,0.5); } }
+@keyframes fadeUp      { from { opacity:0; transform:translateY(16px); }
+                         to   { opacity:1; transform:translateY(0); } }
+@keyframes fadeIn      { from { opacity:0; } to { opacity:1; } }
+@keyframes ticker      { from { transform:translateX(100vw); } to { transform:translateX(-100%); } }
+@keyframes scanMove    { from { transform:translateY(0); } to { transform:translateY(4px); } }
+@keyframes borderPulse { 0%,100% { border-color: rgba(210,255,0,0.1); }
+                             50% { border-color: rgba(210,255,0,0.4); } }
+
+/* ─── Skeleton shimmer ──────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
 }
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 25%,
+    var(--bg-raise)   50%,
+    var(--bg-surface) 75%
+  );
+  background-size: 600px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 2px;
+}
+.skeleton-stat {
+  height: 4rem;
+  width: 80%;
+  margin: 0 auto 0.75rem;
+}
+.skeleton-label {
+  height: 0.65rem;
+  width: 50%;
+  margin: 0 auto;
+}
+
+/* ─── Click ripple ───────────────────────────────────────────────────── */
+@keyframes ripple-out {
+  to { transform: scale(4); opacity: 0; }
+}
+.ripple-btn {
+  position: relative;
+  overflow: hidden;
+}
+.ripple-btn .ripple-circle {
+  position: absolute;
+  border-radius: 50%;
+  width: 8px;
+  height: 8px;
+  background: rgba(210,255,0,0.45);
+  transform: scale(0);
+  animation: ripple-out 0.55s ease-out forwards;
+  pointer-events: none;
+  margin-left: -4px;
+  margin-top:  -4px;
+}
+
+/* ─── Hover glow on accent text ─────────────────────────────────────── */
+.accent-red  { color: #FF3B30; transition: text-shadow var(--t-mid); }
+.accent-lime { color: #D2FF00; transition: text-shadow var(--t-mid); }
+.accent-red:hover  { text-shadow: 0 0 12px rgba(255,59,48,0.7);  }
+.accent-lime:hover { text-shadow: 0 0 12px rgba(210,255,0,0.7);  }
 
 /* ─── Scanline overlay ──────────────────────────────────────────────── */
 .scanline-overlay {
@@ -108,9 +159,7 @@ body {
   z-index: 1000;
   transition: background var(--t-mid), border-color var(--t-mid);
 }
-.hud-header:hover {
-  border-bottom-color: var(--border-glow);
-}
+.hud-header:hover { border-bottom-color: var(--border-glow); }
 
 .system-title {
   font-family: var(--mono);
@@ -152,15 +201,12 @@ body {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SCROLL SECTIONS — the page is now continuous
+   SCROLL SECTIONS
 ════════════════════════════════════════════════════════════════════ */
-
-/* Section wrapper — no card, content lives directly in the page */
 .scroll-section {
   padding: 5rem 3rem;
   border-bottom: 1px solid var(--border);
   position: relative;
-  /* reveal: set by JS intersection observer */
   opacity: 0;
   transform: translateY(32px);
   transition: opacity var(--t-slow), transform var(--t-slow);
@@ -170,13 +216,11 @@ body {
   transform: translateY(0);
 }
 
-/* Alternating left/right reveals */
 .scroll-section.from-left  { transform: translate(-48px, 0); }
 .scroll-section.from-right { transform: translate( 48px, 0); }
 .scroll-section.revealed.from-left,
 .scroll-section.revealed.from-right { transform: translate(0, 0); }
 
-/* Section accent line */
 .scroll-section::before {
   content: '';
   position: absolute;
@@ -188,14 +232,13 @@ body {
 }
 .scroll-section.revealed::before { opacity: 0.4; }
 
-/* ─── Section header (replaces card header, no box) ─────────────────── */
+/* ─── Section header ─────────────────────────────────────────────── */
 .section-header {
   display: flex;
   align-items: baseline;
   gap: 1.5rem;
   margin-bottom: 3rem;
 }
-
 .section-index {
   font-family: var(--mono);
   font-size: 0.6rem;
@@ -203,7 +246,6 @@ body {
   color: var(--lime);
   opacity: 0.5;
 }
-
 .section-eyebrow {
   font-family: var(--mono);
   font-size: 0.5rem;
@@ -212,7 +254,6 @@ body {
   text-transform: uppercase;
   margin-bottom: 0.35rem;
 }
-
 .section-title {
   font-family: var(--mono);
   font-size: clamp(1.1rem, 2.5vw, 1.6rem);
@@ -221,7 +262,6 @@ body {
   color: var(--text-1);
   transition: color var(--t-mid);
 }
-
 .section-status {
   margin-left: auto;
   font-family: var(--mono);
@@ -232,7 +272,47 @@ body {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION DIVIDER — the animated horizontal rule between sections
+   HERO STATS BAR — Step 3
+   Full-width, no card, bleeds into page background
+════════════════════════════════════════════════════════════════════ */
+.hero-stats-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  /* NO gap, NO background — cells touch each other with divider lines */
+}
+.hero-stat-cell {
+  padding: 3.5rem 3rem;
+  text-align: center;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: transparent;           /* bleeds into page bg */
+  transition: background var(--t-mid);
+  cursor: default;
+}
+.hero-stat-cell:last-child { border-right: none; }
+.hero-stat-cell:hover { background: rgba(255,255,255,0.02); }
+
+.hero-stat-val {
+  font-family: var(--mono);
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-weight: 700;
+  line-height: 1;
+  transition: text-shadow var(--t-mid);
+}
+.hero-stat-cell:hover .hero-stat-val {
+  text-shadow: 0 0 32px currentColor;
+}
+.hero-stat-label {
+  font-family: var(--mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.35em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  margin-top: 0.9rem;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SECTION DIVIDER
 ════════════════════════════════════════════════════════════════════ */
 .section-divider {
   height: 1px;
@@ -244,48 +324,14 @@ body {
 .section-divider:hover { opacity: 0.35; }
 
 /* ════════════════════════════════════════════════════════════════════
-   HUB — hero landing replaced by stats bar + inline modules
-════════════════════════════════════════════════════════════════════ */
-.hub-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  background: var(--border);
-  margin-bottom: 4rem;
-}
-.hub-stat-cell {
-  background: var(--bg-surface);
-  padding: 2.5rem 2rem;
-  text-align: center;
-  transition: background var(--t-mid), transform var(--t-mid);
-  cursor: default;
-}
-.hub-stat-cell:hover {
-  background: var(--bg-raise);
-  transform: translateY(-2px);
-}
-.hub-stat-val {
-  font-family: var(--mono);
-  font-size: 3rem;
-  font-weight: 700;
-  line-height: 1;
-  transition: text-shadow var(--t-mid);
-}
-.hub-stat-cell:hover .hub-stat-val {
-  text-shadow: 0 0 24px currentColor;
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   CARDS — now barely-there tiles, not white boxes
+   CARDS
 ════════════════════════════════════════════════════════════════════ */
 .tactical-card {
   background: var(--bg-surface);
   border: 1px solid var(--border);
   padding: 2rem;
-  transition: background var(--t-mid),
-              border-color var(--t-mid),
-              transform var(--t-mid),
-              box-shadow var(--t-mid);
+  transition: background var(--t-mid), border-color var(--t-mid),
+              transform var(--t-mid), box-shadow var(--t-mid);
 }
 .tactical-card:hover {
   background: var(--bg-raise);
@@ -304,12 +350,7 @@ body {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   INTEL BRICK (zone cards in anomaly/prediction panels)
-════════════════════════════════════════════════════════════════════ */
-/* IntelBrick already uses .tactical-card — overrides handled by parent grid */
-
-/* ════════════════════════════════════════════════════════════════════
-   SECTION LABEL (kept for internal sub-headers)
+   SECTION LABEL
 ════════════════════════════════════════════════════════════════════ */
 .section-label {
   font-family: var(--mono);
@@ -363,13 +404,24 @@ body {
 }
 .back-btn:hover::after { opacity: 1; }
 .back-btn span, .back-btn > * { position: relative; z-index: 1; }
+.back-btn:disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
 
-/* Disabled state */
-.back-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-  pointer-events: none;
+/* Lime sweep for Generate Schedule — Step 7 */
+.btn-lime-sweep {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(210,255,0,0.35) !important;
+  color: var(--lime) !important;
 }
+.btn-lime-sweep::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(210,255,0,0.18) 50%, transparent 100%);
+  transform: translateX(-100%);
+  transition: transform 0.6s cubic-bezier(0.22,1,0.36,1);
+}
+.btn-lime-sweep:hover::before { transform: translateX(100%); }
 
 /* ════════════════════════════════════════════════════════════════════
    INPUTS
@@ -387,9 +439,7 @@ input:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(210,255,0,0.07) !important;
   background: var(--bg-raise) !important;
 }
-input::placeholder, textarea::placeholder {
-  color: var(--text-3) !important;
-}
+input::placeholder, textarea::placeholder { color: var(--text-3) !important; }
 
 /* ════════════════════════════════════════════════════════════════════
    TABLES
@@ -411,12 +461,8 @@ table td {
   border-bottom: 1px solid rgba(255,255,255,0.04);
   transition: background var(--t-fast);
 }
-table tbody tr {
-  transition: background var(--t-fast);
-}
-table tbody tr:hover td {
-  background: rgba(255,255,255,0.03);
-}
+table tbody tr { transition: background var(--t-fast); }
+table tbody tr:hover td { background: rgba(255,255,255,0.03); }
 
 /* ════════════════════════════════════════════════════════════════════
    LIVE TICKER
@@ -439,12 +485,10 @@ table tbody tr:hover td {
   color: var(--text-3);
   transition: border-color var(--t-mid);
 }
-.live-ticker-wrap:hover {
-  border-top-color: rgba(210,255,0,0.2);
-}
+.live-ticker-wrap:hover { border-top-color: rgba(210,255,0,0.2); }
 
 /* ════════════════════════════════════════════════════════════════════
-   STRATEGIC TRAY (Crime Map bottom stats)
+   STRATEGIC TRAY (Crime Map)
 ════════════════════════════════════════════════════════════════════ */
 .strategic-tray {
   display: flex;
@@ -461,7 +505,7 @@ table tbody tr:hover td {
 .tray-item:hover { background: var(--bg-raise); }
 
 /* ════════════════════════════════════════════════════════════════════
-   LEAFLET (dark map filter)
+   LEAFLET
 ════════════════════════════════════════════════════════════════════ */
 .leaflet-container {
   height: 60vh !important;
@@ -471,7 +515,7 @@ table tbody tr:hover td {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   ZONE STAT DISPLAY
+   ZONE STAT
 ════════════════════════════════════════════════════════════════════ */
 .zone-score-value {
   font-family: var(--mono);
@@ -489,7 +533,7 @@ table tbody tr:hover td {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   FOCUS VIEW (module detail — stays for inner modules)
+   FOCUS VIEW
 ════════════════════════════════════════════════════════════════════ */
 .focus-view {
   padding: 3rem;
@@ -498,7 +542,7 @@ table tbody tr:hover td {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   HUB GRID (kept for fallback / sub-module grid)
+   HUB GRID (sub-module fallback)
 ════════════════════════════════════════════════════════════════════ */
 .hub-grid {
   display: grid;
@@ -544,12 +588,41 @@ table tbody tr:hover td {
 .hub-tile:hover .tile-title { color: #fff; }
 
 /* ════════════════════════════════════════════════════════════════════
+   HUB STATS (old — kept for compat)
+════════════════════════════════════════════════════════════════════ */
+.hub-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  margin-bottom: 4rem;
+}
+.hub-stat-cell {
+  background: var(--bg-surface);
+  padding: 2.5rem 2rem;
+  text-align: center;
+  transition: background var(--t-mid), transform var(--t-mid);
+  cursor: default;
+}
+.hub-stat-cell:hover { background: var(--bg-raise); transform: translateY(-2px); }
+.hub-stat-val {
+  font-family: var(--mono);
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: text-shadow var(--t-mid);
+}
+.hub-stat-cell:hover .hub-stat-val { text-shadow: 0 0 24px currentColor; }
+
+/* ════════════════════════════════════════════════════════════════════
    RESPONSIVE
 ════════════════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
-  .hud-header   { padding: 0 1.25rem; }
-  .scroll-section { padding: 3.5rem 1.25rem; }
-  .focus-view   { padding: 1.5rem 1.25rem; }
-  .hub-stats    { grid-template-columns: 1fr; }
-  .strategic-tray { flex-direction: column; }
+  .hud-header      { padding: 0 1.25rem; }
+  .scroll-section  { padding: 3.5rem 1.25rem; }
+  .focus-view      { padding: 1.5rem 1.25rem; }
+  .hub-stats       { grid-template-columns: 1fr; }
+  .strategic-tray  { flex-direction: column; }
+  .hero-stats-bar  { grid-template-columns: 1fr; }
+  .hero-stat-cell  { border-right: none; }
 }
