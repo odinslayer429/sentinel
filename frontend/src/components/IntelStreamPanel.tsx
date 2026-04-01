@@ -83,9 +83,11 @@ export default function IntelStreamPanel() {
   // ── Poll for new entries every 20 s ──────────────────────────────────────
   const pollNew = useCallback(async () => {
     try {
-      // Fetch last 5 min to catch any burst
-      const res = await axios.get<IntelEvent[]>('/api/events/recent?hours=0&since=' +
-        new Date(Date.now() - 5 * 60 * 1000).toISOString() + '&limit=50');
+      // Use `since` param only — DO NOT pass hours=0 (backend requires hours >= 1)
+      const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const res = await axios.get<IntelEvent[]>(
+        `/api/events/recent?since=${encodeURIComponent(since)}&limit=50`
+      );
       const fresh = (Array.isArray(res.data) ? res.data : [])
         .filter(e => e.id > lastSeen);
       if (fresh.length === 0) return;
