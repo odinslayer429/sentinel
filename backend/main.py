@@ -45,14 +45,15 @@ OPEN_PREFIXES = [
     "/api/investigation", "/api/briefing", "/api/predict",
     "/api/social",  "/api/news",   "/api/debug",  "/api/status",
     "/api/auth",
+    # — opened so the dashboard loads without auth —
+    "/api/stats",  "/api/ml",  "/api/copilot",
+    "/api/operations", "/api/tactical",
     "/docs", "/openapi.json", "/ws", "/redoc", "/",
 ]
 
-# ── Background news ingestion loop (every 30 min) ─────────────────────────────
-NEWS_INGEST_INTERVAL = 30 * 60   # seconds
+NEWS_INGEST_INTERVAL = 30 * 60
 
 async def _news_ingest_loop():
-    """Run on startup then every 30 minutes for the lifetime of the server."""
     while True:
         try:
             loop = asyncio.get_event_loop()
@@ -65,16 +66,10 @@ async def _news_ingest_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. Start Redis subscriber
     subscribe_task = asyncio.create_task(redis_subscriber.start())
-
-    # 2. Kick off real news ingestion immediately on startup, then every 30 min
     news_task = asyncio.create_task(_news_ingest_loop())
     print("[STARTUP] Sentinel backend online — news ingestion started")
-
     yield
-
-    # Cleanup
     subscribe_task.cancel()
     news_task.cancel()
     for t in (subscribe_task, news_task):
@@ -87,7 +82,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Sentinel Full Backend", lifespan=lifespan)
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173")
 ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
@@ -100,7 +94,6 @@ app.add_middleware(
 )
 
 
-# ── JWT Auth Enforcement Middleware ───────────────────────────────────────────
 @app.middleware("http")
 async def enforce_jwt_auth(request: Request, call_next):
     path = request.url.path
@@ -132,7 +125,6 @@ def _unauthorized(detail: str) -> JSONResponse:
     )
 
 
-# ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth_router)
 app.include_router(stats_router)
 app.include_router(ml_router)
@@ -156,7 +148,6 @@ app.include_router(fir_router)
 app.include_router(social_router)
 
 
-# ── WebSocket ─────────────────────────────────────────────────────────────────
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -167,7 +158,6 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
-# ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/")
 def root():
     return {"message": "Sentinel Full Backend is online", "port": 8000}
@@ -176,8 +166,6 @@ def root():
 def status_check():
     return {"status": "OK"}
 
-
-# ── Manual trigger endpoints ──────────────────────────────────────────────────
 @app.get("/api/news/feed")
 def get_news_feed():
     data = fetch_crime_news()
@@ -185,6 +173,5 @@ def get_news_feed():
 
 @app.get("/api/debug/fetch")
 def trigger_fetch():
-    """Manually trigger a news ingest right now and return how many rows were written."""
     n = ingest_crime_news()
     return {"inserted": n, "message": f"{n} real news articles written to DB"}
