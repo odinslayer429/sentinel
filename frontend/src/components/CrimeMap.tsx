@@ -59,6 +59,44 @@ function mlRiskColor(level: string) {
   return '#D2FF00';
 }
 
+/* ─── invalidateSize fixer ───────────────────────────────────── */
+/**
+ * Calls map.invalidateSize() after mount (rAF + 250 ms fallback) and
+ * whenever the map container is resized (ResizeObserver).
+ * Fixes the grey-tile / clipped-tile bug that happens when a map
+ * renders inside a CSS transition or a hidden-then-revealed container.
+ */
+function MapResizeFixer() {
+  const map = useMap();
+
+  useEffect(() => {
+    // immediate rAF pass — catches most cases
+    const raf = requestAnimationFrame(() => map.invalidateSize());
+    // 250 ms safety net — catches framer-motion fade-in delay
+    const t1  = setTimeout(() => map.invalidateSize(), 250);
+    // 600 ms belt-and-braces — catches slow renders
+    const t2  = setTimeout(() => map.invalidateSize(), 600);
+
+    // ResizeObserver — reacts to any future container size change
+    // (panel open/close, sidebar collapse, window resize)
+    const container = map.getContainer();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => map.invalidateSize());
+      ro.observe(container);
+    }
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      ro?.disconnect();
+    };
+  }, [map]);
+
+  return null;
+}
+
 /* ─── Pulse Rings ────────────────────────────────────────────── */
 function MLPulseRings({ zones }: { zones: Zone[] }) {
   const map = useMap();
@@ -152,7 +190,6 @@ function PredictionPanel({ zone, pred, loading, onClose }: PanelProps) {
       overflowY: 'auto',
       boxShadow: `-8px 0 40px ${color}22`,
     }}>
-
       {/* Header */}
       <div style={{
         padding: '14px 16px',
@@ -214,7 +251,6 @@ function PredictionPanel({ zone, pred, loading, onClose }: PanelProps) {
 
         {!loading && pred && (
           <>
-            {/* Timeband badge */}
             <div style={{
               display: 'inline-block',
               background: '#111', border: '1px solid #333',
@@ -224,7 +260,6 @@ function PredictionPanel({ zone, pred, loading, onClose }: PanelProps) {
               {pred.timeband.toUpperCase()} // {pred.hour}:00
             </div>
 
-            {/* Top-3 bars */}
             {pred.predictions.map((p, i) => {
               const barColor = mlRiskColor(p.risk_level);
               const pct = Math.round(p.probability * 100);
@@ -257,7 +292,6 @@ function PredictionPanel({ zone, pred, loading, onClose }: PanelProps) {
               );
             })}
 
-            {/* Model accuracy footer */}
             <div style={{
               borderTop: '1px solid #111', paddingTop: '10px', marginTop: '4px',
               fontSize: '9px', color: '#444',
@@ -296,10 +330,10 @@ function MLBadge({ zone, topRisk }: { zone: Zone; topRisk: string | null }) {
 
 /* ─── Main Component ─────────────────────────────────────────── */
 export default function CrimeMap() {
-  const [zones,   setZones]   = useState<Zone[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Zone | null>(null);
-  const [panelPred, setPanelPred] = useState<ZonePrediction | null>(null);
+  const [zones,        setZones]        = useState<Zone[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [selected,     setSelected]     = useState<Zone | null>(null);
+  const [panelPred,    setPanelPred]    = useState<ZonePrediction | null>(null);
   const [panelLoading, setPanelLoading] = useState(false);
 
   const { predMap, lastUpdated, fetchZone } = usePredictions(60_000);
@@ -330,8 +364,10 @@ export default function CrimeMap() {
   }, [fetchZone]);
 
   if (loading) return (
-    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: '#000', color: '#D2FF00', fontFamily: 'Space Mono, monospace', letterSpacing: '4px' }}>
+    <div style={{
+      height: '520px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: '#000', color: '#D2FF00', fontFamily: 'Space Mono, monospace', letterSpacing: '4px',
+    }}>
       LOADING SPATIAL INTEL...
     </div>
   );
@@ -343,9 +379,18 @@ export default function CrimeMap() {
   const hotspotCount = zones.filter(z => z.hawkes_intensity > 0).length;
 
   return (
-    <div style={{ height: '100%', width: '100%', position: 'relative', display: 'flex' }}>
-
+    /* Overflow hidden prevents any internal Leaflet element from
+       causing horizontal scroll on the full-bleed wrapper          */
+    <div style={{
+      height: '520px',
+      width: '100%',
+      position: 'relative',
+      display: 'flex',
+      overflow: 'hidden',       /* ← overflow guard */
+      maxWidth: '100vw',        /* ← hard width cap  */
+    }}>
       <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+
         {/* Status bar */}
         <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, display: 'flex', gap: '8px', alignItems: 'center' }}>
           <div style={{ background: '#000', border: '1px solid #D2FF00', padding: '4px 10px',
@@ -366,12 +411,19 @@ export default function CrimeMap() {
           )}
         </div>
 
-        <MapContainer center={[19.1, 72.877]} zoom={11}
-          style={{ height: '100%', width: '100%', background: '#000' }} zoomControl>
+        <MapContainer
+          center={[19.1, 72.877]}
+          zoom={11}
+          style={{ height: '100%', width: '100%', background: '#000' }}
+          zoomControl
+        >
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           />
+
+          {/* ← Step 6: fixes grey tiles after CSS transitions */}
+          <MapResizeFixer />
 
           <GeoJSON
             key={`zones-${zones.length}`}
