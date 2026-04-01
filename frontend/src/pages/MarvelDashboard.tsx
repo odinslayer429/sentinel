@@ -30,14 +30,9 @@ const deriveSeverity = (ev:Event) => { if(ev.severity)return ev.severity.toUpper
 const ZONE_CENTERS:Record<string,[number,number]> = { Z01:[18.9067,72.8147],Z02:[18.9438,72.8249],Z03:[19.0396,72.8528],Z04:[19.0596,72.8295],Z05:[19.1197,72.8468],Z06:[19.2294,72.8567],Z07:[19.0726,72.8847],Z08:[19.0867,72.9081],Z09:[19.1726,72.9563],Z10:[19.1197,72.9070],Z11:[19.0330,73.0297],Z12:[19.2183,72.9781] };
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
-/**
- * Step 2: Skeleton shimmer — replaces Spinner for first-load states.
- * Each panel gets a skeleton that matches its rough shape.
- */
 function SkeletonSection() {
   return (
     <div style={{padding:'1rem 0'}}>
-      {/* stat row */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'1px',background:'var(--border)',marginBottom:'2rem'}}>
         {[0,1,2].map(i=>(
           <div key={i} style={{background:'var(--bg-surface)',padding:'2rem',textAlign:'center'}}>
@@ -46,7 +41,6 @@ function SkeletonSection() {
           </div>
         ))}
       </div>
-      {/* card row */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'1px',background:'var(--border)'}}>
         {[0,1,2,3].map(i=>(
           <div key={i} style={{background:'var(--bg-surface)',padding:'2rem'}}>
@@ -77,9 +71,6 @@ const ErrorState = ({msg,onRetry}:{msg:string;onRetry:()=>void}) => (
 );
 
 // ─── Ripple helper ────────────────────────────────────────────────────────────
-/**
- * Step 2 polish: attach ripple on click to any .ripple-btn element.
- */
 function useRipple() {
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -108,7 +99,7 @@ function useReveal() {
         entries => entries.forEach(e => {
           if (e.isIntersecting) { e.target.classList.add('revealed'); io.unobserve(e.target); }
         }),
-        { threshold: 0.04 }   // lower = triggers sooner on tall sections
+        { threshold: 0.04 }
       );
       els.forEach(el => io.observe(el));
       return io;
@@ -178,7 +169,6 @@ function WeeklyScheduler() {
   const generate=()=>{ const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']; setSchedule(days.map(day=>({day,shift:day.startsWith('S')?'Double':'Standard',mult:day.startsWith('S')?1.5:1.0}))); };
   return(
     <div>
-      {/* Step 7: lime sweep button */}
       <button onClick={generate} className="back-btn btn-lime-sweep ripple-btn" style={{marginBottom:'1.5rem'}}>GENERATE SCHEDULE</button>
       <AnimatePresence>
         {schedule.length>0&&(
@@ -206,7 +196,6 @@ function AIIntakeSection() {
   return(
     <div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1rem'}}>
-        {/* Step 8-ish: drag-over glow is already wired via inline style below */}
         <div onClick={()=>fileInputRef.current?.click()} onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={e=>{e.preventDefault();setDragOver(false);if(e.dataTransfer.files?.[0]){setFile(e.dataTransfer.files[0]);setComplaint('');}}} style={{border:`2px dashed ${dragOver?'var(--lime)':file?'rgba(210,255,0,0.4)':'rgba(255,255,255,0.1)'}`,padding:'2rem',textAlign:'center',cursor:'pointer',background:dragOver?'rgba(210,255,0,0.06)':file?'rgba(210,255,0,0.03)':'transparent',transition:'all 0.2s',boxShadow:dragOver?'0 0 20px rgba(210,255,0,0.15)':'none'}}>
           <div style={{fontSize:'2rem',marginBottom:'0.5rem'}}>{file?'📄':'📤'}</div>
           <div style={{fontFamily:'Space Mono,monospace',fontSize:'0.55rem',letterSpacing:'0.2em',color:file?'#D2FF00':'var(--text-3)'}}>{file?file.name.toUpperCase():'DROP PDF OR CLICK TO UPLOAD'}</div>
@@ -249,6 +238,11 @@ function NeuralNodePanel() {
 }
 
 // ─── AnomalyIndexPanel ────────────────────────────────────────────────────────
+/**
+ * Step 4: Each severity tier (SURGING / ELEVATED / QUIET) is now wrapped in
+ * .anomaly-tier-cards so CSS nth-child stagger applies, and separated by a
+ * .anomaly-tier-rule with a data-label that etches a text label into the line.
+ */
 function AnomalyIndexPanel({velocity}:{velocity:ZoneVelocity[]}) {
   if(!velocity.length)return<EmptyState icon="⚡" msg="NO VELOCITY DATA"/>;
   const sorted=  [...velocity].sort((a,b)=>b.z_score-a.z_score);
@@ -257,12 +251,45 @@ function AnomalyIndexPanel({velocity}:{velocity:ZoneVelocity[]}) {
   const normal=  sorted.filter(z=>z.z_score<=1);
   return(
     <div>
+      {/* Summary stat row */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'1px',background:'var(--border)',marginBottom:'3rem'}}>
         {[{label:'SURGING ZONES',val:surging.length,color:'#FF3B30'},{label:'ELEVATED ZONES',val:elevated.length,color:'#FF9500'},{label:'QUIET ZONES',val:normal.length,color:'#34C759'}].map((s,i)=>(<div key={i} className="tactical-card" style={{textAlign:'center',padding:'2rem'}}><div style={{fontFamily:'Space Mono,monospace',fontSize:'2.5rem',fontWeight:900,color:s.color,textShadow:`0 0 20px ${s.color}44`}}><CountUp to={s.val}/></div><div className="card-label" style={{marginTop:'0.5rem'}}>{s.label}</div></div>))}
       </div>
-      {surging.length>0&&(<><div className="section-label" style={{color:'#FF3B30'}}>⚠ NEEDS IMMEDIATE ATTENTION</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'1px',background:'var(--border)',marginBottom:'2rem'}}>{surging.map((z,i)=>{const h=zToHeat(z.z_score);return<IntelBrick key={z.zone_id} index={i} zone={z.zone_id} zoneName={z.zone_name} headline={h.label} detail={`${z.current_1h} incidents this hour vs usual ${z.mean_1h?.toFixed(0)}/hr. ${h.sub}.`} action="DEPLOY IMMEDIATELY" color={h.color}/>;})}</div></>)}
-      {elevated.length>0&&(<><div className="section-label" style={{color:'#FF9500'}}>↑ ABOVE NORMAL</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'1px',background:'var(--border)',marginBottom:'2rem'}}>{elevated.map((z,i)=>{const h=zToHeat(z.z_score);return<IntelBrick key={z.zone_id} index={i} zone={z.zone_id} zoneName={z.zone_name} headline={h.label} detail={`${z.current_1h} incidents this hour vs usual ${z.mean_1h?.toFixed(0)}/hr.`} action="INCREASE PATROLS" color={h.color}/>;})}</div></>)}
-      {normal.length>0&&(<><div className="section-label" style={{color:'#34C759'}}>● QUIET ZONES</div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:'1px',background:'var(--border)'}}>{normal.map((z,i)=>(<motion.div key={z.zone_id} className="tactical-card" initial={{opacity:0}} animate={{opacity:1}} transition={{delay:Math.min(i*0.03,0.5)}} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'1rem 1.5rem',borderLeft:'2px solid #34C759'}}><div><div style={{fontFamily:'Space Mono,monospace',fontWeight:900,fontSize:'0.75rem',letterSpacing:'0.15em',color:'var(--text-1)'}}>{z.zone_id}</div><div style={{fontSize:'0.48rem',color:'var(--text-3)',marginTop:2}}>{z.zone_name.toUpperCase()}</div></div><div style={{textAlign:'right'}}><div style={{fontFamily:'Space Mono,monospace',fontSize:'0.6rem',fontWeight:900,color:'#34C759'}}>QUIET</div><div style={{fontSize:'0.48rem',color:'var(--text-3)',marginTop:2}}>{z.current_1h} incident{z.current_1h!==1?'s':''} this hour</div></div></motion.div>))}</div></>)}
+
+      {/* SURGING tier */}
+      {surging.length>0&&(
+        <>
+          <div className="anomaly-tier-rule" data-label="⚠ NEEDS IMMEDIATE ATTENTION" style={{['--rule-color' as any]:'#FF3B30'}}/>
+          <div className="anomaly-tier-cards" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'1px',background:'var(--border)',marginBottom:'1rem'}}>
+            {surging.map((z,i)=>{const h=zToHeat(z.z_score);return<IntelBrick key={z.zone_id} index={i} zone={z.zone_id} zoneName={z.zone_name} headline={h.label} detail={`${z.current_1h} incidents this hour vs usual ${z.mean_1h?.toFixed(0)}/hr. ${h.sub}.`} action="DEPLOY IMMEDIATELY" color={h.color}/>;})}
+          </div>
+        </>
+      )}
+
+      {/* ELEVATED tier */}
+      {elevated.length>0&&(
+        <>
+          <div className="anomaly-tier-rule" data-label="↑ ABOVE NORMAL"/>
+          <div className="anomaly-tier-cards" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:'1px',background:'var(--border)',marginBottom:'1rem'}}>
+            {elevated.map((z,i)=>{const h=zToHeat(z.z_score);return<IntelBrick key={z.zone_id} index={i} zone={z.zone_id} zoneName={z.zone_name} headline={h.label} detail={`${z.current_1h} incidents this hour vs usual ${z.mean_1h?.toFixed(0)}/hr.`} action="INCREASE PATROLS" color={h.color}/>;})}
+          </div>
+        </>
+      )}
+
+      {/* QUIET tier */}
+      {normal.length>0&&(
+        <>
+          <div className="anomaly-tier-rule" data-label="● QUIET ZONES"/>
+          <div className="anomaly-tier-cards" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:'1px',background:'var(--border)'}}>
+            {normal.map((z,i)=>(
+              <motion.div key={z.zone_id} className="tactical-card" initial={{opacity:0}} animate={{opacity:1}} transition={{delay:Math.min(i*0.03,0.5)}} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'1rem 1.5rem',borderLeft:'2px solid #34C759'}}>
+                <div><div style={{fontFamily:'Space Mono,monospace',fontWeight:900,fontSize:'0.75rem',letterSpacing:'0.15em',color:'var(--text-1)'}}>{z.zone_id}</div><div style={{fontSize:'0.48rem',color:'var(--text-3)',marginTop:2}}>{z.zone_name.toUpperCase()}</div></div>
+                <div style={{textAlign:'right'}}><div style={{fontFamily:'Space Mono,monospace',fontSize:'0.6rem',fontWeight:900,color:'#34C759'}}>QUIET</div><div style={{fontSize:'0.48rem',color:'var(--text-3)',marginTop:2}}>{z.current_1h} incident{z.current_1h!==1?'s':''} this hour</div></div>
+              </motion.div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -318,7 +345,6 @@ export default function MarvelDashboard() {
   const [wsNewCount,setWsNewCount] = useState(0);
   const [clock,    setClock]    = useState(new Date().toLocaleTimeString());
   const [patrolPct]= useState(Math.floor(Math.random()*40)+30);
-  // Track whether stats have been revealed so CountUp fires exactly once
   const [statsRevealed, setStatsRevealed] = useState(false);
   const statsRef = useRef<HTMLDivElement>(null);
 
@@ -327,7 +353,6 @@ export default function MarvelDashboard() {
 
   useEffect(()=>{ const t=setInterval(()=>setClock(new Date().toLocaleTimeString()),1000); return()=>clearInterval(t); },[]);
 
-  // Step 3: trigger CountUp when the stats bar first scrolls into view
   useEffect(() => {
     const el = statsRef.current;
     if (!el) return;
@@ -394,7 +419,7 @@ export default function MarvelDashboard() {
       <ScrollBar/>
       <div className="scanline-overlay"/>
 
-      {/* HEADER — untouched */}
+      {/* HEADER */}
       <header className="hud-header">
         <div className="system-title glitch-text">SENTINEL<span>.HUD</span></div>
         <div style={{display:'flex',gap:'2rem',alignItems:'center'}}>
@@ -418,12 +443,7 @@ export default function MarvelDashboard() {
         </div>
       </header>
 
-      {/*
-        ── STEP 3: HERO STATS BAR ────────────────────────────────────────────
-        Full-width, no card wrapper, no background — bleeds into page bg.
-        Numbers count up via CountUp triggered by IntersectionObserver.
-        revealed class added manually (it's always visible at top so always pre-revealed).
-      */}
+      {/* HERO STATS BAR */}
       <div ref={statsRef} className="hero-stats-bar scroll-section revealed">
         {[
           {label:'INCIDENTS TODAY',  val:statsRevealed?(stats?.total_24h||0):0, color:'var(--lime)'},
@@ -446,15 +466,37 @@ export default function MarvelDashboard() {
       </div>
       <div className="section-divider"/>
 
-      {/* 02 — CRIME MAP */}
-      <div className="scroll-section from-right" id="s-map">
-        <SectionHead index="02" eyebrow="SPATIAL INTELLIGENCE" title="CRIME HEAT MAP" status="● LIVE"/>
-        <div style={{border:'1px solid var(--border)',overflow:'hidden'}}><CrimeMap/></div>
-        <div className="strategic-tray" style={{marginTop:'1px'}}>
-          <div className="tray-item"><div className="card-label">HOTTEST ZONES</div>{[...velocity].sort((a,b)=>b.z_score-a.z_score).slice(0,3).map(z=>(<div key={z.zone_id} style={{display:'flex',justifyContent:'space-between',margin:'6px 0',fontSize:'0.7rem'}}><span style={{color:'var(--text-2)'}}>{z.zone_id} – {z.zone_name}</span><span style={{color:zToHeat(z.z_score).color,fontFamily:'Space Mono,monospace',fontWeight:700,fontSize:'0.55rem'}}>{zToHeat(z.z_score).label}</span></div>))}</div>
-          <div className="tray-item"><div className="card-label">INCIDENT TYPES</div><div style={{display:'flex',flexDirection:'column',gap:'0.4rem',marginTop:'0.5rem'}}>{[['🔴','Theft / Robbery','#FF3B30'],['🟠','Assault','#FF9500'],['🔵','Cyber Crime','var(--cyan)']].map(([dot,label,color],i)=>(<div key={i} style={{fontSize:'0.6rem',color:color as string}}>{dot} {label}</div>))}</div></div>
-          <div className="tray-item"><div className="card-label">ON PATROL</div><div style={{fontFamily:'Space Mono,monospace',fontSize:'2rem',fontWeight:900,color:'var(--cyan)',textShadow:'0 0 12px var(--cyan)'}}>{patrolPct}%</div></div>
-          <div className="tray-item"><div className="card-label">CLUSTER ALERT</div><div style={{fontFamily:'Space Mono,monospace',color:surges.length>0?'var(--red)':'var(--green)',fontWeight:900,fontSize:'0.8rem',marginTop:4}}>{surges.length>0?`⚠ ${surges.length} ZONES CLUSTERING`:'● ALL CLEAR'}</div></div>
+      {/*
+        ── STEP 5: CRIME MAP — full-width fade
+        Outer section has NO horizontal padding so the map edge-to-edges.
+        A motion.div wraps CrimeMap: fades in from below (opacity 0→1, y 24→0)
+        when the section enters the viewport (scroll-section.revealed cascade).
+        The strategic tray below gets the same 3rem side padding restored.
+      */}
+      <div className="scroll-section from-right" id="s-map" style={{padding:'5rem 0 0'}}>
+        <div style={{padding:'0 3rem'}}>
+          <SectionHead index="02" eyebrow="SPATIAL INTELLIGENCE" title="CRIME HEAT MAP" status="● LIVE"/>
+        </div>
+
+        {/* Full-bleed map with fade-up on reveal */}
+        <motion.div
+          initial={{opacity:0,y:24}}
+          whileInView={{opacity:1,y:0}}
+          viewport={{once:true,amount:0.1}}
+          transition={{duration:0.7,ease:[0.22,1,0.36,1]}}
+          style={{overflow:'hidden',borderTop:'1px solid var(--border)',borderBottom:'1px solid var(--border)'}}
+        >
+          <CrimeMap/>
+        </motion.div>
+
+        {/* Tray gets its own padding restored */}
+        <div style={{padding:'0 3rem 5rem'}}>
+          <div className="strategic-tray" style={{marginTop:'1px'}}>
+            <div className="tray-item"><div className="card-label">HOTTEST ZONES</div>{[...velocity].sort((a,b)=>b.z_score-a.z_score).slice(0,3).map(z=>(<div key={z.zone_id} style={{display:'flex',justifyContent:'space-between',margin:'6px 0',fontSize:'0.7rem'}}><span style={{color:'var(--text-2)'}}>{z.zone_id} – {z.zone_name}</span><span style={{color:zToHeat(z.z_score).color,fontFamily:'Space Mono,monospace',fontWeight:700,fontSize:'0.55rem'}}>{zToHeat(z.z_score).label}</span></div>))}</div>
+            <div className="tray-item"><div className="card-label">INCIDENT TYPES</div><div style={{display:'flex',flexDirection:'column',gap:'0.4rem',marginTop:'0.5rem'}}>{[['🔴','Theft / Robbery','#FF3B30'],['🟠','Assault','#FF9500'],['🔵','Cyber Crime','var(--cyan)']].map(([dot,label,color],i)=>(<div key={i} style={{fontSize:'0.6rem',color:color as string}}>{dot} {label}</div>))}</div></div>
+            <div className="tray-item"><div className="card-label">ON PATROL</div><div style={{fontFamily:'Space Mono,monospace',fontSize:'2rem',fontWeight:900,color:'var(--cyan)',textShadow:'0 0 12px var(--cyan)'}}>{patrolPct}%</div></div>
+            <div className="tray-item"><div className="card-label">CLUSTER ALERT</div><div style={{fontFamily:'Space Mono,monospace',color:surges.length>0?'var(--red)':'var(--green)',fontWeight:900,fontSize:'0.8rem',marginTop:4}}>{surges.length>0?`⚠ ${surges.length} ZONES CLUSTERING`:'● ALL CLEAR'}</div></div>
+          </div>
         </div>
       </div>
       <div className="section-divider"/>
